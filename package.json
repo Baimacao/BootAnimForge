@@ -1,0 +1,27 @@
+{
+  "name": "bootanimforge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "把 MP4 等视频转成安卓开机动画（bootanimation.zip）的 Windows 工具：MD3 界面 + ffmpeg 引擎，零运行时依赖",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "dev": "node src/main.js --no-open",
+    "fetch-ffmpeg": "node tools/fetch-ffmpeg.js",
+    "selftest": "node tools/selftest.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "android",
+    "bootanimation",
+    "ffmpeg",
+    "mp4",
+    "material-design-3"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "mp4box": "^2.4.1"
+  }
+}

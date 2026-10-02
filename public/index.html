@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>开机动画工坊 · BootAnimForge</title>
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='6' fill='%234FC3F7'/><path d='M9.5 7.5v9l7-4.5z' fill='%2300344A'/></svg>">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== 顶部应用栏 ===== -->
+  <header class="appbar">
+    <div class="brand">
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-6.6l1.3 2.1a1 1 0 1 1-1.7 1L11.4 16H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm6.6 3.2v5.6l4.8-2.8-4.8-2.8Z"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>开机动画工坊</h1>
+        <span>BootAnimForge · MP4 → 安卓开机动画</span>
+      </div>
+    </div>
+
+    <nav class="stepper" id="stepper" aria-label="步骤"></nav>
+
+    <div class="spacer"></div>
+
+    <button class="icon-btn" id="btn-tutorial" title="使用教程（F1）" aria-label="使用教程">
+      <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-2h2v2Zm1.8-6.3-.9.9c-.7.7-1.1 1.3-1.1 2.4h-2v-.5c0-.9.4-1.7 1.1-2.4l1.2-1.2c.4-.3.6-.8.6-1.4a2.2 2.2 0 0 0-4.4 0H7a4 4 0 1 1 8 0c0 .8-.3 1.5-.8 2.1Z"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-theme" title="切换明暗主题" aria-label="切换主题">
+      <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12Zm0-16 1.9 3.2 3.6-.9-.9 3.6L20 12l-3.4 1.8.9 3.6-3.6-.9L12 20l-1.9-3.5-3.6.9.9-3.6L4 12l3.4-1.8-.9-3.6 3.6.9L12 2Z"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-close" title="退出程序" aria-label="退出程序">
+      <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+    </button>
+  </header>
+
+  <!-- ===== 主体 ===== -->
+  <div class="main">
+    <main class="content" id="content">
+
+      <!-- 视图 0：欢迎 / 缺少引擎 -->
+      <section class="view" id="view-welcome" hidden>
+        <div class="hero">
+          <div class="logo-xl" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-6.6l1.3 2.1a1 1 0 1 1-1.7 1L11.4 16H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm6.6 3.2v5.6l4.8-2.8-4.8-2.8Z"/></svg>
+          </div>
+          <h2>把任意视频变成安卓开机动画</h2>
+          <p>拖入一段 MP4，设好分辨率和循环方式，一键产出可以直接刷进系统的 <b>bootanimation.zip</b>。</p>
+        </div>
+        <div class="feature-row stagger">
+          <div class="feature">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z"/></svg>
+            <b>绝不拉伸</b><span>等比缩放 + 居中留边，或等比放大填充裁切，二选一，画面比例永不变形。</span>
+          </div>
+          <div class="feature">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7V3Z"/><path fill="currentColor" d="M13 3v8h8a8 8 0 0 0-8-8Z"/></svg>
+            <b>分段与循环</b><span>把动画切成多段，每段单独设置循环次数、暂停帧数，做出「先转再停」的效果。</span>
+          </div>
+          <div class="feature">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M5 20h14v-2H5v2ZM12 3 6.5 8.5 8 10l3-3V16h2V7l3 3 1.5-1.5L12 3Z"/></svg>
+            <b>开箱即用</b><span>自动适配机型分辨率，内置常见设备预设与参数校验，产出即合规。</span>
+          </div>
+        </div>
+        <div class="card" id="engine-card" style="margin-top:var(--sp-5)">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4Z"/></svg>
+            <h2>视频引擎状态</h2>
+            <div class="spacer"></div>
+            <span class="tag" id="engine-tag">检测中…</span>
+          </div>
+          <div id="engine-body" class="hint">正在检测 ffmpeg…</div>
+          <div class="input-row" style="margin-top:var(--sp-4)">
+            <button class="btn filled" id="btn-start">开始</button>
+            <button class="btn tonal" id="btn-fetch-engine" hidden>重新下载引擎</button>
+            <button class="btn text" id="btn-tutorial2">看教程</button>
+          </div>
+          <div class="log-box" id="engine-log" style="margin-top:var(--sp-4)" hidden></div>
+        </div>
+      </section>
+
+      <!-- 视图 1：导入 -->
+      <section class="view" id="view-import" hidden>
+        <div class="drop" id="drop">
+          <div class="drop-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 3 6.5 8.5 8 10l3-3V16h2V7l3 3 1.5-1.5L12 3ZM5 19h14v2H5v-2Z"/></svg>
+          </div>
+          <h2>拖入视频文件</h2>
+          <p>也可以点击这里选择文件，或按 <b>Ctrl+O</b></p>
+          <div class="formats">MP4 · MOV · MKV · AVI · WebM · FLV · TS · WMV · M4V · GIF</div>
+          <input type="file" id="file-input" accept="video/*,.mkv,.flv,.ts,.wmv,.m4v,.gif" hidden>
+        </div>
+
+        <div id="recent-wrap" style="margin-top:var(--sp-5)" hidden>
+          <div class="rail-title" style="margin-bottom:var(--sp-2)">最近使用</div>
+          <div id="recent-list" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+        </div>
+
+        <div class="input-row" style="margin-top:var(--sp-4)">
+          <button class="btn tonal small" id="btn-browse-file">按路径浏览视频…</button>
+          <span class="hint">拖放或文件对话框拿不到磁盘路径时，用这个手动定位（读的是原文件，不复制不上传）</span>
+        </div>
+
+        <div class="card" id="import-info" style="margin-top:var(--sp-5)" hidden>
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16v14H4V5Zm2 2v10h12V7H6Z"/></svg>
+            <h2>源视频</h2>
+            <div class="spacer"></div>
+            <span class="tag info" id="src-tag"></span>
+          </div>
+          <div class="file-row">
+            <div class="file-thumb" id="src-thumb"></div>
+            <div class="file-meta">
+              <b id="src-name">—</b>
+              <span id="src-detail">—</span>
+            </div>
+            <button class="btn text small" id="btn-change-file">换一个</button>
+          </div>
+          <div class="grid-3" style="margin-top:var(--sp-4)" id="src-stats"></div>
+        </div>
+
+        <div class="card flat">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M11 7h2v2h-2V7Zm0 4h2v6h-2v-6Zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/></svg>
+            <h2>不知道从哪开始？</h2>
+          </div>
+          <p class="hint">第一次用建议先看 2 分钟教程：它会告诉你开机动画是怎么工作的、分辨率该怎么填、循环次数怎么设才不会卡在开机界面。</p>
+          <div class="input-row" style="margin-top:var(--sp-3)">
+            <button class="btn tonal small" id="btn-tutorial3">打开教程</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图 2：配置 -->
+      <section class="view" id="view-configure" hidden>
+
+        <!-- 分辨率 -->
+        <div class="card">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5h18v12H3V5Zm2 2v8h14V7H5Zm3 12h8v2H8v-2Z"/></svg>
+            <h2>目标分辨率</h2>
+            <button class="help" data-help="res">?</button>
+            <div class="spacer"></div>
+            <span class="tag" id="res-tag">1080 × 1920</span>
+          </div>
+
+          <div class="field" style="margin-bottom:var(--sp-4)">
+            <label class="field-label">设备预设</label>
+            <select class="input" id="preset-select"></select>
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label" for="in-width">宽（像素）</label>
+              <input class="input mono" id="in-width" type="number" min="2" max="7680" step="2" inputmode="numeric">
+            </div>
+            <div class="field">
+              <label class="field-label" for="in-height">高（像素）</label>
+              <input class="input mono" id="in-height" type="number" min="2" max="7680" step="2" inputmode="numeric">
+            </div>
+          </div>
+
+          <div class="input-row" style="margin-top:var(--sp-3)">
+            <button class="btn text small" id="btn-swap">交换横竖</button>
+            <button class="btn text small" id="btn-fit-source">匹配视频比例</button>
+            <div class="spacer"></div>
+            <span class="hint" id="ar-hint"></span>
+          </div>
+        </div>
+
+        <!-- 画面适配 -->
+        <div class="card">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h7v2H6v5H4V4Zm9 0h7v7h-2V6h-5V4ZM4 13h2v5h5v2H4v-7Zm14 0h2v7h-7v-2h5v-5Z"/></svg>
+            <h2>画面适配方式</h2>
+            <button class="help" data-help="scale">?</button>
+            <div class="spacer"></div>
+            <span class="tag ok">永不拉伸</span>
+          </div>
+          <div class="grid-3 stagger" id="scale-modes"></div>
+          <div class="field" style="margin-top:var(--sp-4)">
+            <label class="field-label" for="in-bg">留边颜色 / 背景色 <button class="help" data-help="bg">?</button></label>
+            <div class="input-row">
+              <input class="input mono" id="in-bg" type="text" value="#000000" style="max-width:140px" spellcheck="false">
+              <input type="color" id="in-bg-pick" value="#000000" style="width:48px;height:44px;border:none;background:transparent;cursor:pointer;padding:0">
+              <span class="hint" id="bg-hint"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 帧率与时长 -->
+        <div class="card">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8V2Zm1 5v5.4l4.3 2.5-.9 1.7L11 13V7h2Z"/></svg>
+            <h2>帧率与时长</h2>
+            <button class="help" data-help="fps">?</button>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label">帧率 FPS</label>
+              <div class="slider">
+                <input type="range" id="in-fps" min="1" max="60" step="1" value="30">
+                <div class="unit-input" style="width:110px">
+                  <input class="input mono" id="in-fps-num" type="number" min="1" max="120" value="30">
+                  <span class="unit">FPS</span>
+                </div>
+              </div>
+              <div class="input-row" style="margin-top:6px">
+                <button class="chip" data-fps="24"><b>24</b></button>
+                <button class="chip" data-fps="25"><b>25</b></button>
+                <button class="chip" data-fps="30"><b>30</b></button>
+                <button class="chip" data-fps="60"><b>60</b></button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">取用区间（秒） <button class="help" data-help="trim">?</button></label>
+              <div class="input-row">
+                <div class="unit-input"><input class="input mono" id="in-start" type="number" min="0" step="0.1" value="0"><span class="unit">起</span></div>
+                <div class="unit-input"><input class="input mono" id="in-end" type="number" min="0" step="0.1" value="0"><span class="unit">止</span></div>
+              </div>
+              <div class="hint" id="trim-hint">整段使用</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 分段与循环 -->
+        <div class="card">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M7 7h10v3l4-4-4-4v3H5v6h2V7Zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4Z"/></svg>
+            <h2>分段与循环</h2>
+            <button class="help" data-help="parts">?</button>
+            <div class="spacer"></div>
+            <span class="tag" id="parts-tag"></span>
+          </div>
+
+          <div class="timeline" id="timeline">
+            <div class="timeline-frames"><canvas id="tl-canvas" width="640" height="76"></canvas></div>
+            <div class="timeline-overlay" id="tl-overlay"></div>
+          </div>
+          <div class="tl-ruler"><span>0.00s</span><span id="tl-mid">—</span><span id="tl-end">—</span></div>
+
+          <div class="input-row" style="margin:var(--sp-4) 0">
+            <button class="btn tonal small" id="btn-split">
+              <svg class="icon-s" viewBox="0 0 24 24"><path fill="currentColor" d="M11 3h2v18h-2V3Z"/></svg>
+              在播放头处切分
+            </button>
+            <button class="btn text small" id="btn-add-part">+ 追加一段</button>
+            <button class="btn text small" id="btn-clear-parts">重置为单段</button>
+            <div class="spacer"></div>
+            <button class="btn text small" id="btn-play">
+              <svg class="icon-s" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+              试播
+            </button>
+          </div>
+
+          <div id="parts-list" style="display:flex;flex-direction:column;gap:10px"></div>
+
+          <div class="switch" style="margin-top:var(--sp-4);border-top:1px solid var(--md-outline-variant);padding-top:var(--sp-4)">
+            <div class="switch-text">
+              <b>每段附带音效 audio.wav</b>
+              <span>把该段对应时间的音频提取为 44.1kHz WAV。仅部分设备支持开机音效，多数机器会忽略。</span>
+            </div>
+            <input type="checkbox" id="in-audio">
+            <label class="track" for="in-audio"></label>
+          </div>
+        </div>
+
+        <!-- 输出格式 -->
+        <div class="card">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-6.6l1.3 2.1a1 1 0 1 1-1.7 1L11.4 16H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm6.6 3.2v5.6l4.8-2.8-4.8-2.8Z"/></svg>
+            <h2>输出格式</h2>
+            <button class="help" data-help="format">?</button>
+            <div class="spacer"></div>
+            <span class="tag ok">永不拉伸</span>
+          </div>
+          <div class="grid-2 stagger" id="format-modes"></div>
+        </div>
+
+        <!-- 视频版参数 -->
+        <div class="card" id="video-card" hidden>
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4Z"/></svg>
+            <h2>视频版参数</h2>
+            <button class="help" data-help="video">?</button>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label">画质 CRF <button class="help" data-help="crf">?</button> <span class="hint" id="crf-label"></span></label>
+              <div class="slider">
+                <input type="range" id="in-crf" min="14" max="32" step="1" value="20">
+                <span class="mono" id="crf-val" style="width:28px;text-align:right">20</span>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">编码速度 <button class="help" data-help="preset">?</button></label>
+              <select class="input" id="in-preset">
+                <option value="veryfast">很快（体积略大）</option>
+                <option value="faster">较快</option>
+                <option value="fast">快</option>
+                <option value="medium">标准（推荐）</option>
+                <option value="slow">慢（体积最小）</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" style="margin-top:var(--sp-4)">
+            <label class="field-label">音轨码率</label>
+            <div class="input-row">
+              <select class="input" id="in-audiobr" style="max-width:200px">
+                <option value="96">96 kbps</option>
+                <option value="128">128 kbps（推荐）</option>
+                <option value="192">192 kbps</option>
+                <option value="256">256 kbps</option>
+              </select>
+              <span class="hint">同时写入 bootanimation.mp4 与独立的 audio.mp3</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 输出与打包 -->
+        <div class="card">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2Z"/></svg>
+            <h2>输出与打包</h2>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label">输出目录</label>
+              <div class="input-row">
+                <input class="input" id="in-outdir" type="text" spellcheck="false" placeholder="默认：程序目录下的 output">
+                <button class="btn tonal small" id="btn-pick-dir">选择…</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">文件名</label>
+              <input class="input mono" id="in-outname" type="text" value="bootanimation.zip" spellcheck="false">
+            </div>
+          </div>
+
+          <div class="grid-2" id="frame-opts" style="margin-top:var(--sp-4)">
+            <div class="field">
+              <label class="field-label">帧图片格式 <button class="help" data-help="quality">?</button></label>
+              <select class="input" id="in-quality">
+                <option value="png-fast">PNG · 快速压缩（推荐）</option>
+                <option value="png">PNG · 标准压缩</option>
+                <option value="png-max">PNG · 最大压缩（最省空间，最慢）</option>
+                <option value="mjpeg">JPEG · 体积最小（有轻微损失）</option>
+              </select>
+            </div>
+            <div class="field" id="jpeg-field" hidden>
+              <label class="field-label">JPEG 质量 <span class="hint">数值越小越清晰</span></label>
+              <div class="slider">
+                <input type="range" id="in-jpegq" min="2" max="20" step="1" value="4">
+                <span class="mono" id="jpegq-val" style="width:32px;text-align:right">4</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-top:var(--sp-4)">
+            <div class="switch" id="compress-switch">
+              <div class="switch-text">
+                <b>压缩 zip（不推荐）</b>
+                <span>官方规范要求不压缩（zip -0）。开启只减小体积，但开机解包更慢。</span>
+              </div>
+              <input type="checkbox" id="in-compress">
+              <label class="track" for="in-compress"></label>
+            </div>
+            <div class="switch" id="alpha-switch">
+              <div class="switch-text">
+                <b>保留透明通道</b>
+                <span>源视频带 alpha 时保留透明（输出 PNG）。视频版与 JPEG 不支持透明。</span>
+              </div>
+              <input type="checkbox" id="in-alpha" checked>
+              <label class="track" for="in-alpha"></label>
+            </div>
+          </div>
+
+          <div class="switch" style="margin-top:var(--sp-4);border-top:1px solid var(--md-outline-variant);padding-top:var(--sp-4)">
+            <div class="switch-text">
+              <b>同时生成 Magisk 模块 <button class="help" data-help="magisk">?</button></b>
+              <span>额外产出一个可直接刷入的模块 zip，卸载即恢复原开机动画，不用改系统分区。</span>
+            </div>
+            <input type="checkbox" id="in-magisk">
+            <label class="track" for="in-magisk"></label>
+          </div>
+
+          <div id="magisk-opts" hidden style="margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:1px solid var(--md-outline-variant)">
+            <div class="grid-2">
+              <div class="field">
+                <label class="field-label">模块 ID <button class="help" data-help="magisk-id">?</button></label>
+                <input class="input mono" id="in-magisk-id" type="text" spellcheck="false">
+              </div>
+              <div class="field">
+                <label class="field-label">模块名称（Magisk 里显示）</label>
+                <input class="input" id="in-magisk-name" type="text">
+              </div>
+              <div class="field">
+                <label class="field-label">版本</label>
+                <input class="input mono" id="in-magisk-version" type="text" spellcheck="false">
+              </div>
+              <div class="field">
+                <label class="field-label">作者</label>
+                <input class="input" id="in-magisk-author" type="text">
+              </div>
+            </div>
+            <div class="field" style="margin-top:var(--sp-3)">
+              <label class="field-label">说明</label>
+              <input class="input" id="in-magisk-desc" type="text" placeholder="留空自动生成">
+            </div>
+            <div class="grid-2" style="margin-top:var(--sp-3)">
+              <div class="field">
+                <label class="field-label">写入路径 <button class="help" data-help="magisk-path">?</button></label>
+                <select class="input" id="in-magisk-path">
+                  <option value="system/media">/system/media（最常见）</option>
+                  <option value="system/product/media">/product/media（Android 10+）</option>
+                  <option value="system/oem/media">/oem/media（部分厂商）</option>
+                </select>
+              </div>
+              <div class="switch" style="align-self:end">
+                <div class="switch-text">
+                  <b>同时在多个路径都放一份</b>
+                  <span>更保险，代价是模块体积翻倍</span>
+                </div>
+                <input type="checkbox" id="in-magisk-allpaths" checked>
+                <label class="track" for="in-magisk-allpaths"></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-row" style="justify-content:flex-end;margin-top:var(--sp-5)">
+          <button class="btn text" id="btn-back-1">上一步</button>
+          <button class="btn filled" id="btn-to-export">
+            下一步：导出
+            <svg class="icon-s" viewBox="0 0 24 24"><path fill="currentColor" d="M10 6 8.6 7.4 13.2 12l-4.6 4.6L10 18l6-6-6-6Z"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- 视图 3：导出 -->
+      <section class="view" id="view-export" hidden>
+        <div class="card" id="preflight">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="m9 16.2-3.5-3.5L4 14.2 9 19 20 8l-1.5-1.4L9 16.2Z"/></svg>
+            <h2>转换前检查</h2>
+            <div class="spacer"></div>
+            <span class="tag" id="preflight-tag">检查中…</span>
+          </div>
+          <div class="msg-list" id="preflight-msgs"></div>
+          <div class="stat-row" id="preflight-stats"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M5 20h14v-2H5v2ZM12 3 6.5 8.5 8 10l3-3V16h2V7l3 3 1.5-1.5L12 3Z"/></svg>
+            <h2>desc.txt 内容（将写入 zip）</h2>
+            <button class="help" data-help="desc">?</button>
+            <div class="spacer"></div>
+            <button class="btn text small" id="btn-copy-desc">复制</button>
+          </div>
+          <div class="desc-preview" id="desc-full"></div>
+          <div class="hint" style="margin-top:var(--sp-3)" id="desc-explain"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 2 7l10 5 10-5-10-5Zm0 7.2L5.6 6 12 3.1 18.4 6 12 9.2ZM2 17l10 5 10-5-10-5-10 5Z"/></svg>
+            <h2>打包内容</h2>
+          </div>
+          <div class="msg-list" id="zip-plan"></div>
+        </div>
+
+        <div class="input-row" style="justify-content:flex-end;margin-top:var(--sp-5)">
+          <button class="btn text" id="btn-back-2">返回修改</button>
+          <button class="btn filled" id="btn-run">
+            <svg class="icon-s" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+            开始转换
+          </button>
+        </div>
+      </section>
+
+      <!-- 视图 4：进度 -->
+      <section class="view" id="view-progress" hidden>
+        <div class="progress-wrap">
+          <div class="ring">
+            <svg viewBox="0 0 120 120">
+              <circle class="bg" cx="60" cy="60" r="54"></circle>
+              <circle class="fg" cx="60" cy="60" r="54" id="ring-fg"
+                      stroke-dasharray="339.29" stroke-dashoffset="339.29"></circle>
+            </svg>
+            <div class="center">
+              <div class="pct" id="prog-pct">0%</div>
+              <div class="stage" id="prog-stage">准备中</div>
+            </div>
+          </div>
+          <div class="progress-stages" id="prog-stages"></div>
+          <div class="hint" id="prog-detail">—</div>
+          <div class="input-row">
+            <button class="btn outlined" id="btn-cancel">取消</button>
+            <button class="btn text small" id="btn-toggle-log">显示日志</button>
+          </div>
+          <div class="log-box" id="prog-log" hidden style="max-width:720px"></div>
+        </div>
+      </section>
+
+      <!-- 视图 5：完成 -->
+      <section class="view" id="view-done" hidden>
+        <div class="result-card">
+          <div class="result-icon">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="m9 16.2-3.5-3.5L4 14.2 9 19 20 8l-1.5-1.4L9 16.2Z"/></svg>
+          </div>
+          <h2>转换完成</h2>
+          <p class="dim" id="done-path" style="margin-top:6px;word-break:break-all"></p>
+          <div class="stat-row" id="done-stats"></div>
+          <div class="input-row" style="justify-content:center;margin-top:var(--sp-5)">
+            <button class="btn filled" id="btn-reveal">在文件夹中显示</button>
+            <button class="btn tonal" id="btn-again">再做一次</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:var(--sp-5)">
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4Z"/></svg>
+            <h2>怎么装到手机上</h2>
+          </div>
+          <div id="install-guide"></div>
+          <div class="tut-note warn">
+            <b>刷之前一定先备份原文件</b>
+            <p>把原来的 bootanimation（zip 或 mp4）复制一份留好。文件格式不对或权限不对，会导致开机阶段黑屏（系统仍能启动，但看不到动画）。用 Magisk 模块则随时可以卸载还原。</p>
+          </div>
+        </div>
+
+        <div class="card" id="done-msgs-card" hidden>
+          <div class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 1 21h22L12 2Zm1 14h-2v2h2v-2Zm0-7h-2v5h2V9Z"/></svg>
+            <h2>提示与警告</h2>
+          </div>
+          <div class="msg-list" id="done-msgs"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ===== 右侧预览栏 ===== -->
+    <aside class="rail">
+      <div class="rail-section">
+        <div class="rail-title">预览</div>
+        <div class="preview-frame portrait" id="preview-frame">
+          <div class="placeholder" id="preview-placeholder">导入视频后<br>这里显示画面</div>
+          <img id="preview-img" alt="预览帧" hidden>
+          <video id="preview-video" hidden muted playsinline preload="metadata"></video>
+          <div class="preview-parts" id="preview-parts"></div>
+          <div class="preview-badge" id="preview-badge" hidden>—</div>
+        </div>
+      </div>
+
+      <div class="rail-section">
+        <div class="rail-title">产出摘要</div>
+        <div class="kv"><span>输出格式</span><b id="rail-format">—</b></div>
+        <div class="kv"><span>打包形态</span><b id="rail-output">—</b></div>
+        <div class="kv"><span>分辨率</span><b class="mono" id="rail-res">—</b></div>
+        <div class="kv"><span>帧率</span><b class="mono" id="rail-fps">—</b></div>
+        <div class="kv"><span>总帧数</span><b class="mono" id="rail-frames">—</b></div>
+        <div class="kv"><span>分段</span><b class="mono" id="rail-parts">—</b></div>
+        <div class="kv"><span>预计体积</span><b class="mono" id="rail-size">—</b></div>
+        <div class="kv"><span>播放时长</span><b class="mono" id="rail-dur">—</b></div>
+      </div>
+
+      <div class="rail-section">
+        <div class="rail-title">desc.txt 预览</div>
+        <div class="desc-preview" id="desc-mini"></div>
+      </div>
+
+      <div class="rail-section">
+        <div class="rail-title">校验</div>
+        <div class="msg-list" id="rail-msgs">
+          <div class="msg note">
+            <svg class="icon-s" viewBox="0 0 24 24"><path fill="currentColor" d="M11 7h2v2h-2V7Zm0 4h2v6h-2v-6Zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/></svg>
+            <div>导入视频后会在这里给出参数检查结果。</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ===== 浮层 ===== -->
+<div id="modal-host"></div>
+<div class="snackbar-host" id="snackbar-host"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

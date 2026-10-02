@@ -1,0 +1,17 @@
+# 运行时引擎（体积大，由 启动.cmd / tools/fetch-ffmpeg.js 自动下载）
+runtime/*.exe
+runtime/SOURCE.json
+runtime/FFMPEG-LICENSE.txt
+
+# 工作目录与产物
+.work/
+output/
+config/settings.json
+
+# 依赖（运行时代码零依赖，这里只可能出现在开发辅助里）
+node_modules/
+
+# 杂项
+*.log
+Thumbs.db
+desktop.ini
