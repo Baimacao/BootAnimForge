@@ -40,12 +40,17 @@ function loadToken() {
 
 const API = 'https://api.github.com';
 
-async function gh(token, method, apiPath, body, { raw = false } = {}) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 5xx / 429 / 网络抖动都值得重试（GitHub 偶发 504） */
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+
+async function ghOnce(token, method, apiPath, body) {
   const res = await fetch(API + apiPath, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,
-      Accept: raw ? 'application/vnd.github+json' : 'application/vnd.github+json',
+      Accept: 'application/vnd.github+json',
       'User-Agent': 'BootAnimForge',
       'X-GitHub-Api-Version': '2022-11-28',
       ...(body ? { 'Content-Type': 'application/json' } : {}),
@@ -63,6 +68,25 @@ async function gh(token, method, apiPath, body, { raw = false } = {}) {
     throw err;
   }
   return data;
+}
+
+/** 带退避重试的 API 调用 */
+async function gh(token, method, apiPath, body, { retries = 4, raw = false } = {}) {
+  void raw;
+  let lastErr = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await ghOnce(token, method, apiPath, body);
+    } catch (e) {
+      lastErr = e;
+      const retryable = RETRYABLE.has(e.status) || /fetch failed|ECONNRESET|ETIMEDOUT|terminated/i.test(e.message);
+      if (!retryable || attempt === retries) throw e;
+      const wait = Math.min(8000, 600 * Math.pow(2, attempt));
+      console.log(`  · ${method} ${apiPath} 失败（${e.status || e.message}），${wait}ms 后重试 ${attempt + 1}/${retries}`);
+      await sleep(wait);
+    }
+  }
+  throw lastErr;
 }
 
 /** 查询 token 身份与权限范围 */
