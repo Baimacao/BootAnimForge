@@ -409,12 +409,21 @@ async function serveFile(req, res, filePath, allowRange = false) {
 
   const ext = path.extname(filePath).toLowerCase();
   const type = MIME[ext] || 'application/octet-stream';
+
+  // 用 mtime+size 做 ETag：改了代码立刻生效，没改则走 304，不必手动清缓存。
+  // （不能让浏览器按 max-age 缓存，否则前端改了而浏览器还在用旧文件——这个坑真踩过。）
+  const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
   const headers = {
     'Content-Type': type,
-    'Cache-Control': ext === '.html' ? 'no-store' : 'public, max-age=60',
+    'ETag': etag,
+    'Cache-Control': 'no-cache',
     'Access-Control-Allow-Origin': '*',
     'Accept-Ranges': allowRange ? 'bytes' : 'none',
   };
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { ETag: etag, 'Cache-Control': 'no-cache' });
+    return res.end();
+  }
 
   let start = 0;
   let end = st.size - 1;

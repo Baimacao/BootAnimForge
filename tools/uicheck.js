@@ -130,6 +130,9 @@ class CDP {
     await cdp.send('Runtime.enable');
     await cdp.send('Log.enable');
     await cdp.send('Page.enable');
+    // 应用会把「上次会话」存进 localStorage，第二次运行时可能直接恢复到第 2 步。
+    // 测试需要确定的初始状态，所以在导航前先清掉本地存储。
+    try { await cdp.send('Storage.clearDataForOrigin', { origin: new URL(URL_).origin, storageTypes: 'local_storage' }); } catch { /* 忽略 */ }
     await cdp.send('Page.navigate', { url: URL_ });
 
     const evalJs = async (expr) => {
@@ -342,6 +345,164 @@ class CDP {
       const ts = await cdp.send('Page.captureScreenshot', { format: 'png' });
       fs.writeFileSync(path.join(docDir, 'screenshot-tutorial.png'), Buffer.from(ts.data, 'base64'));
       console.log('文档截图：docs/screenshot-tutorial.png');
+      await evalJs(`document.querySelector('.dialog-head .icon-btn').click()`);
+      await sleep(500);
+
+      // 输出格式 + Magisk 模块设置（滚到对应位置）
+      await evalJs(`window.__baf.actions.demoFill()`);
+      await evalJs(`(()=>{const m=document.querySelector('#in-magisk');m.checked=true;m.dispatchEvent(new Event('change'));
+        document.querySelector('#magisk-opts').hidden=false;})()`);
+      await sleep(700);
+      const scrolled = await evalJs(`(() => {
+        const el = document.querySelector('#format-modes');
+        const y = el.getBoundingClientRect().top + document.querySelector('#content').scrollTop - 90;
+        document.querySelector('#content').scrollTo({ top: y, behavior: 'instant' });
+        return document.querySelector('#content').scrollTop;
+      })()`);
+      await sleep(900);
+      const fs2 = await cdp.send('Page.captureScreenshot', { format: 'png' });
+      fs.writeFileSync(path.join(docDir, 'screenshot-output.png'), Buffer.from(fs2.data, 'base64'));
+      console.log(`文档截图：docs/screenshot-output.png（scrollTop=${scrolled}）`);
+    }
+
+    // ---------- 动效验证（--anim） ----------
+    if (process.argv.includes('--anim')) {
+      console.log('\n=== 动效验证（MD3 运动系统）===');
+
+      // 无头 Chromium 默认上报 prefers-reduced-motion: reduce，而本项目按无障碍要求
+      // 为该偏好提供了「动画压到 1ms」的降级 —— 那会让动效完全测不到。
+      // 所以这里用 CDP 显式声明用户在动画偏好上是 no-preference。
+      await cdp.send('Emulation.setEmulatedMedia', {
+        features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+      });
+      const reduced = await evalJs(`matchMedia('(prefers-reduced-motion: reduce)').matches`);
+      console.log(`  ${reduced === false ? '✓' : '✗'} 已声明 no-preference（当前 reduce=${reduced}）`);
+      if (reduced !== false) errors.push('无法关闭 prefers-reduced-motion，动效测试不可靠');
+
+      const anim = async (label, expr, expect = true) => {
+        let val;
+        try { val = await evalJs(expr); } catch (e) { val = 'ERR:' + e.message; }
+        const good = expect === true ? !!val : val === expect;
+        console.log(`  ${good ? '✓' : '✗'} ${label} → ${JSON.stringify(val)}`);
+        if (!good) errors.push(`动效断言失败：${label} → ${JSON.stringify(val)}`);
+        return val;
+      };
+
+      // 设计令牌确实定义了 MD3 强调曲线
+      const easeVal = await evalJs(`getComputedStyle(document.documentElement).getPropertyValue('--ease-emphasized').trim()`);
+      const easeOk = /cubic-bezier\(\s*\.?0?\.?2\s*,\s*0\s*,\s*0\s*,\s*1\s*\)/.test(easeVal);
+      console.log(`  ${easeOk ? '✓' : '✗'} emphasized 曲线令牌存在 → ${JSON.stringify(easeVal)}`);
+      if (!easeOk) errors.push('--ease-emphasized 不是预期的 cubic-bezier(.2,0,0,1)');
+      await anim('动效时长令牌存在（medium4=400ms）',
+        `getComputedStyle(document.documentElement).getPropertyValue('--dur-medium4').trim()`, '400ms');
+
+      // 前进方向：新视图应带 enter-forward，且过渡确实在跑
+      // goStep(2/3) 需要已载入视频（否则按设计直接返回），所以先放一个测试视频进去。
+      const animVideo = argOf('--video') || path.join(ROOT, '.work', 'selftest', 'src-1280x720-6s.mp4');
+      await evalJs(`window.__baf.actions.loadVideo(${JSON.stringify(animVideo)})`);
+      for (let i = 0; i < 40; i++) {
+        if (await evalJs(`!!window.__baf.state.info`)) break;
+        await sleep(250);
+      }
+      const hasInfo = await evalJs(`!!window.__baf.state.info`);
+      console.log(`  ${hasInfo ? '✓' : '✗'} 测试视频已载入（后续步骤切换才有意义）`);
+      if (!hasInfo) errors.push('动效测试无法载入测试视频');
+
+      await evalJs(`window.__baf.actions.goStep(1)`);
+      await sleep(700);
+      const fromState = await evalJs(`(() => ({ view: window.__baf.state.step,
+        importHidden: document.querySelector('#view-import').hidden,
+        cfgHidden: document.querySelector('#view-configure').hidden }))()`);
+      console.log(`  · 起始状态：step=${fromState.view} import隐藏=${fromState.importHidden} configure隐藏=${fromState.cfgHidden}`);
+
+      const forward = await evalJs(`(() => {
+        window.__baf.actions.goStep(2);
+        const el = document.querySelector('#view-configure');
+        const cs = getComputedStyle(el);
+        return { step: window.__baf.state.step, cls: el.className, hidden: el.hidden,
+                 anim: cs.animationName, dur: cs.animationDuration, tran: cs.transform };
+      })()`);
+      console.log(`  · 前进转场：step=${forward.step} hidden=${forward.hidden} class="${forward.cls}" animation=${forward.anim} ${forward.dur} transform=${forward.tran}`);
+      const fwdOk = /enter-forward/.test(forward.cls) && forward.anim === 'shared-x-in-forward';
+      console.log(`  ${fwdOk ? '✓' : '✗'} 前进时应用 shared-axis 入场动画`);
+      if (!fwdOk) errors.push(`前进转场动画未应用（class="${forward.cls}" anim=${forward.anim}）`);
+      const fwdDur = await anim('入场动画时长为 0.4s（MD3 medium4）', `getComputedStyle(document.querySelector('#view-configure')).animationDuration`, '0.4s');
+
+      // 关键帧本身必须是从右侧（正 translateX）滑入；直接读 CSSOM，避免采样时机带来的抖动
+      const kf = await evalJs(`(() => {
+        for (const sheet of document.styleSheets) {
+          let rules; try { rules = sheet.cssRules; } catch { continue; }
+          for (const r of rules) {
+            if (r.type === CSSRule.KEYFRAMES_RULE && r.name === 'shared-x-in-forward') {
+              const from = [...r.cssRules].find(k => k.keyText === '0%' || k.keyText === 'from');
+              return from ? from.style.transform : null;
+            }
+          }
+        }
+        return null;
+      })()`);
+      const kfOk = typeof kf === 'string' && /translateX\(\s*\d/.test(kf) && !/translateX\(\s*-/.test(kf);
+      console.log(`  ${kfOk ? '✓' : '✗'} 关键帧从右侧滑入（from transform: ${JSON.stringify(kf)}）`);
+      if (!kfOk) errors.push(`入场关键帧的起始位移不是正 X（${kf}）`);
+
+      await sleep(600);
+      // 动画结束后 transform 应为「无变换」：可能是 none，也可能是单位矩阵
+      const settled = await evalJs(`getComputedStyle(document.querySelector('#view-configure')).transform`);
+      const settledOk = settled === 'none' || /^matrix\(1,\s*0,\s*0,\s*1,\s*0,\s*0\)$/.test(settled);
+      console.log(`  ${settledOk ? '✓' : '✗'} 动画结束后复位为无变换 → ${JSON.stringify(settled)}`);
+      if (!settledOk) errors.push(`动画结束后未复位（transform=${settled}）`);
+      await anim('配置页此时可见', `document.querySelector('#view-configure').hidden`, false);
+
+      // 后退方向：反向动画
+      const back = await evalJs(`(() => {
+        window.__baf.actions.goStep(1);
+        const el = document.querySelector('#view-import');
+        return { cls: el.className, anim: getComputedStyle(el).animationName };
+      })()`);
+      console.log(`  · 后退转场：class="${back.cls}" animation=${back.anim}`);
+      const backOk = /enter-back/.test(back.cls) && back.anim === 'shared-x-in-back';
+      console.log(`  ${backOk ? '✓' : '✗'} 后退时使用相反的 shared-axis 动画`);
+      if (!backOk) errors.push('后退转场动画未应用');
+
+      // 旧的视图应播放退出动画而不是直接消失
+      const exiting = await evalJs(`(() => {
+        window.__baf.actions.goStep(2);
+        const old = document.querySelector('#view-import');
+        return { hidden: old.hidden, cls: old.className };
+      })()`);
+      console.log(`  · 旧视图退出中：hidden=${exiting.hidden} class="${exiting.cls}"`);
+      const exitOk = exiting.hidden === false && /exit-/.test(exiting.cls);
+      console.log(`  ${exitOk ? '✓' : '✗'} 旧视图先播放退出动画（未立即消失）`);
+      if (!exitOk) errors.push('旧视图退出动画缺失');
+
+      // 数值变化时播放 pulse
+      await sleep(700);
+      await evalJs(`window.__baf.actions.demoFill()`);
+      await sleep(400);
+      const pulse = await evalJs(`(() => {
+        const n = document.querySelector('#rail-size');
+        const before = n.textContent;
+        window.__baf.state.estimate = { bytes: 999999999, frames: 1, duration: 1 };
+        window.__baf.actions.renderConfigure();
+        const cs = getComputedStyle(n);
+        return { before, after: n.textContent, cls: n.className, anim: cs.animationName };
+      })()`);
+      console.log(`  · 数值变化：${pulse.before} → ${pulse.after} class="${pulse.cls}" animation=${pulse.anim}`);
+      const pulseOk = /pulse/.test(pulse.cls) && pulse.anim === 'pulse-once';
+      console.log(`  ${pulseOk ? '✓' : '✗'} 数值变化时播放脉冲动效`);
+      if (!pulseOk) errors.push('数值脉冲动效未生效');
+
+      await anim('未变化时不会重复触发动画',
+        `(() => { const n = document.querySelector('#rail-size'); n.classList.remove('pulse');
+           window.__baf.actions.renderConfigure(); return n.className.includes('pulse'); })()`, false);
+
+      // 尊重 prefers-reduced-motion
+      const reduce = await evalJs(`(() => {
+        const rules = [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch { return []; } });
+        return rules.some(r => r.conditionText && r.conditionText.includes('prefers-reduced-motion'));
+      })()`);
+      console.log(`  ${reduce ? '✓' : '✗'} 提供 prefers-reduced-motion 降级规则`);
+      if (!reduce) errors.push('缺少 prefers-reduced-motion 支持');
     }
 
     console.log('\n--- 控制台错误 ---');
@@ -353,7 +514,19 @@ class CDP {
   } finally {
     try { child.kill(); } catch { /* ignore */ }
     await sleep(300);
-    try { fs.rmSync(PROFILE, { recursive: true, force: true }); } catch { /* ignore */ }
+    try { fs.rmSync(PROFILE, { recursive: true, force: true }); } catch { /* 文件可能仍被占用 */ }
   }
-  process.exit(errors.length ? 1 : 0);
+
+  // --docshot 用的是假视频路径，缩略图接口必然返回 400 —— 那是预期噪声，不算错误。
+  const realErrors = process.argv.includes('--docshot')
+    ? errors.filter((e) => !/api\/thumbnail/.test(e))
+    : errors;
+  if (process.argv.includes('--docshot') && realErrors.length !== errors.length) {
+    console.log(`（已忽略 ${errors.length - realErrors.length} 条演示数据产生的缩略图请求错误）`);
+  }
+  if (realErrors.length) {
+    console.log('\n--- 错误汇总 ---');
+    console.log(realErrors.join('\n'));
+  }
+  process.exit(realErrors.length ? 1 : 0);
 })().catch((e) => { console.error('检查失败：', e.message); process.exit(2); });

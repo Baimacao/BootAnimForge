@@ -52,6 +52,9 @@
   - **视频版（Android 12+）**：`bootanimation.mp4`，体积通常只有帧序列的 1/10，自动保证 **moov 前置 + yuv420p + Main profile + 无 B 帧**
 - **分段与循环**：时间轴上随时切分，每段独立设置 `p/c/f` 类型、循环次数（0 = 无限）、暂停帧数、淡出帧数、背景色。
 - **一键生成 Magisk 模块**：额外产出一个可直接刷入的模块 zip（`module.prop` + `customize.sh` + 系统载荷 + 中文说明），卸载即恢复原动画。
+
+<img src="docs/screenshot-output.png" alt="输出格式与 Magisk 模块设置" width="720">
+
 - **试播**：按 `desc.txt` 的真实播放逻辑（循环次数 + 暂停）模拟一遍，直观看到开机时会怎么播。
 - **合规输出**：传统格式的 `desc.txt` 严格按 AOSP 规范生成；zip 默认 `STORE`（等价 `zip -0`），帧按序存放，产出前自动自检。
 - **大量可自定义项**：分辨率、帧率、图片格式（PNG 三档压缩 / JPEG 质量）、透明通道、背景色、zip 压缩、视频版 CRF 与 preset、音轨码率、输出目录与文件名、Magisk 模块元信息与写入路径。
@@ -184,8 +187,10 @@ BootAnimForge/
 node tools/fetch-ffmpeg.js        # 准备引擎
 node tools/selftest.js            # 后端端到端：75 项断言
 node tools/server-ctl.js start    # 起服务
-node tools/uicheck.js --flow      # 无头浏览器跑完整流程：28 项断言
+node tools/uicheck.js --flow      # 无头浏览器跑完整流程：35 项断言
+node tools/uicheck.js --anim      # 动效验证：14 项断言（MD3 运动系统）
 node tools/uicheck.js --docshot   # 重新生成 docs/ 下的截图
+node tools/make-portable.js       # 打便携包（含 ffmpeg 引擎）
 ```
 
 `selftest.js` 会用 ffmpeg 合成测试素材（横屏、旋转、带 alpha），覆盖：
@@ -200,6 +205,12 @@ node tools/uicheck.js --docshot   # 重新生成 docs/ 下的截图
 
 `uicheck.js` 用 Edge 无头模式 + DevTools 协议驱动真实界面：载入视频 → 改参数 → 切分 → 导出 →
 真跑一次传统格式转换 → 切到视频版 + Magisk → 再跑一次，并收集控制台错误。
+`--anim` 额外验证运动系统：强调曲线令牌、shared-axis X 转场的方向与时长、关键帧起始位移、
+旧视图退出动画、数值脉冲，以及 `prefers-reduced-motion` 降级是否真的生效。
+
+> 一个测试上的坑值得记下来：无头 Chromium 默认上报 `prefers-reduced-motion: reduce`，
+> 而本项目按无障碍要求为这个偏好把动画压到 1ms —— 于是动效断言全部"看起来失败"。
+> 现在测试用 CDP 的 `Emulation.setEmulatedMedia` 显式声明 `no-preference` 再测。
 
 ---
 
