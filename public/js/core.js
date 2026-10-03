@@ -194,7 +194,7 @@ export function loadState() {
 export const frameCount = (start, end, fps) =>
   Math.max(1, Math.round(Math.max(0, (Number(end) || 0) - (Number(start) || 0)) * clamp(Math.round(fps) || 30, 1, 240)));
 
-/** 依据视频时长补齐 / 裁剪分段配置 */
+/** 依据视频时长补齐 / 裁剪分段配置。没有分段时会生成「单段无限循环」这一默认。 */
 export function ensureParts(info) {
   const c = state.config;
   const dur = info?.duration || 0;
@@ -219,10 +219,25 @@ export function ensureParts(info) {
   return c.parts;
 }
 
+/**
+ * 算出分段列表。**永不返回空数组**：没有分段时按「整段无限循环」补一段。
+ * 之前这里会对空数组原样返回，导致界面出现「0 段 / 0 帧 / ≈0 B」和一个
+ * 莫名其妙的校验错误 —— 一个空数组不该让整个摘要变成无意义的状态。
+ */
 export function planParts() {
   const c = state.config;
   const fps = clamp(Math.round(c.fps) || 30, 1, 240);
-  const list = (c.parts && c.parts.length ? c.parts : []).map((p, i) => {
+  if (!Array.isArray(c.parts) || c.parts.length === 0) {
+    // 不调用 ensureParts（那需要 info），这里只保证「至少一段」这一不变量
+    if (state.info) ensureParts(state.info);
+    else {
+      c.parts = [{
+        dir: 'part0', name: '主循环', start: 0, end: Math.max(0.1, Number(c.end) || 1),
+        type: 'p', count: 0, pause: 0, fade: 0, background: '', clock: '', audio: false,
+      }];
+    }
+  }
+  const list = c.parts.map((p, i) => {
     const start = Math.max(0, Number(p.start) || 0);
     const end = Math.max(start + 0.001, Number(p.end) || start + 1);
     const frames = frameCount(start, end, fps);
@@ -414,7 +429,7 @@ export const api = {
   fetchEngine: () => req('/api/runtime/fetch', { method: 'POST' }),
   probe: (input) => req('/api/probe', { method: 'POST', body: { input } }),
   analyze: (payload) => req('/api/analyze', { method: 'POST', body: payload }),
-  thumbnail: (input, time, width) => req('/api/thumbnail', { method: 'POST', body: { input, time, width }, timeout: 60000 }),
+  thumbnail: (input, time, width, duration) => req('/api/thumbnail', { method: 'POST', body: { input, time, width, duration }, timeout: 60000 }),
   extract: (payload) => req('/api/extract', { method: 'POST', body: payload, timeout: 60000 }),
   job: (id) => req(`/api/job/${id}`),
   cancel: (id) => req(`/api/job/${id}/cancel`, { method: 'POST' }),

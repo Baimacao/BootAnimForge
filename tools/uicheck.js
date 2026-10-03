@@ -218,6 +218,31 @@ class CDP {
       await step('源视频摘要已显示', `!document.querySelector('#import-info').hidden`, true);
       await step('时间轴分段已渲染', `document.querySelectorAll('#tl-overlay .tl-part').length >= 1`, true);
 
+      // 预览图必须真的能解码 —— 这里踩过坑：缩略图 base64 曾经因为把二进制当
+      // UTF-8 字符串处理而损坏，<img> 解码失败后什么都不显示，预览一片黑，
+      // 而"元素存在/有 src"这类断言完全发现不了。
+      await step('预览图已解码成功（非 0 尺寸）', `(() => {
+        const img = document.querySelector('#preview-img');
+        return !!img && !img.hidden && img.complete && img.naturalWidth > 8 && img.naturalHeight > 8;
+      })()`, true, 30000);
+      await step('预览图不是一张全黑图', `(async () => {
+        const img = document.querySelector('#preview-img');
+        if (!img || !img.naturalWidth) return false;
+        const c = document.createElement('canvas');
+        c.width = 16; c.height = 16;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, 16, 16);
+        const d = ctx.getImageData(0, 0, 16, 16).data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 4) sum += 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        return (sum / (d.length / 4)) > 12;
+      })()`, true, 30000);
+      await step('预览用的 dataURL 是合法 JPEG', `(() => {
+        const src = document.querySelector('#preview-img')?.src || '';
+        return src.startsWith('data:image/jpeg;base64,') && src.length > 800
+          && atob(src.split(',')[1].slice(0, 8)).charCodeAt(0) === 0xFF;
+      })()`, true);
+
       // 2. 配置页交互
       await evalJs(`window.__baf.actions.goStep(2)`);
       await sleep(1200);
@@ -325,15 +350,46 @@ class CDP {
       console.log('视频版完成页截图：.work/ui-shot-video-done.png');
     }
 
-    // ---------- 文档截图（--docshot，用假数据，不依赖视频文件） ----------
+    // ---------- 文档截图（--docshot） ----------
+    // 用真实测试视频，这样截图里能看到真正可用的预览（假路径只会得到黑图）
     if (process.argv.includes('--docshot')) {
       const docDir = path.join(ROOT, 'docs');
       fs.mkdirSync(docDir, { recursive: true });
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 980, deviceScaleFactor: 1, mobile: false });
+
+      const demoVideo = argOf('--video') || path.join(ROOT, '.work', 'selftest', 'src-1280x720-6s.mp4');
+      await evalJs(`window.__baf.actions.loadVideo(${JSON.stringify(demoVideo)})`);
+      for (let i = 0; i < 60; i++) {
+        if (await evalJs(`!!window.__baf.state.info && !!window.__baf.state.thumbnail`)) break;
+        await sleep(300);
+      }
+      await sleep(800);
+      // 设成竖屏目标分辨率，让「留边」这件事在预览里看得出来
+      await evalJs(`window.__baf.actions.goStep(2)`);
+      await sleep(600);
+      await evalJs(`(() => {
+        const s = window.__baf.state;
+        s.config.width = 1080; s.config.height = 1920; s.config.presetId = 'h1080';
+        s.config.fps = 30; s.config.parts = [];      // 故意清空，验证会回落到单段
+        window.__baf.actions.renderConfigure();
+        window.__baf.actions.computeValidation();
+      })()`);
+      await sleep(900);
+      const summary = await evalJs(`({
+        parts: window.__baf.state.plan.list.length,
+        frames: window.__baf.state.plan.frames,
+        railFrames: document.querySelector('#rail-frames').textContent,
+        railSize: document.querySelector('#rail-size').textContent,
+        errors: window.__baf.state.validation.errors.length,
+      })`);
+      console.log(`  · 摘要自愈检查：段数=${summary.parts} 帧数=${summary.frames} 侧栏帧=${summary.railFrames} 体积=${summary.railSize} 错误=${summary.errors}`);
+      if (!(summary.parts >= 1 && summary.frames > 0 && summary.errors === 0)) {
+        errors.push(`空分段时摘要未自愈：${JSON.stringify(summary)}`);
+      }
+
       for (const [stepNo, name] of [[1, 'import'], [2, 'configure'], [3, 'export']]) {
-        await evalJs(`window.__baf.actions.demoFill()`);
-        if (stepNo !== 2) await evalJs(`window.__baf.actions.goStep(${stepNo})`);
-        await sleep(stepNo === 2 ? 2200 : 900);
+        await evalJs(`window.__baf.actions.goStep(${stepNo})`);
+        await sleep(stepNo === 2 ? 1600 : 900);
         const p = path.join(docDir, `screenshot-${name}.png`);
         const s = await cdp.send('Page.captureScreenshot', { format: 'png' });
         fs.writeFileSync(p, Buffer.from(s.data, 'base64'));
@@ -349,7 +405,6 @@ class CDP {
       await sleep(500);
 
       // 输出格式 + Magisk 模块设置（滚到对应位置）
-      await evalJs(`window.__baf.actions.demoFill()`);
       await evalJs(`(()=>{const m=document.querySelector('#in-magisk');m.checked=true;m.dispatchEvent(new Event('change'));
         document.querySelector('#magisk-opts').hidden=false;})()`);
       await sleep(700);

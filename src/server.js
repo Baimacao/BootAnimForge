@@ -280,6 +280,14 @@ async function handleApi(req, res, url) {
   if (p === '/api/thumbnail' && method === 'POST') {
     const body = await readBody(req);
     try {
+      // duration 给了就用「挑一张有代表性的帧」的逻辑，避免片头黑场导致预览全黑
+      if (num(body.duration, 0) > 0) {
+        const r = await ffs.previewThumbnail({
+          input: String(body.input), time: num(body.time, 0),
+          duration: num(body.duration, 0), width: int(body.width, 360),
+        });
+        return json(res, 200, { ok: true, data: r.data, time: r.time, luma: r.luma, allBlack: r.allBlack });
+      }
       const data = await ffs.thumbnail({ input: String(body.input), time: num(body.time, 0), width: int(body.width, 360) });
       return json(res, 200, { ok: true, data });
     } catch (e) {

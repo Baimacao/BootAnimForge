@@ -104,21 +104,26 @@ function resolveBinaries(force = false) {
   return cached;
 }
 
-function runProcess(bin, args, { onStderrLine, onStdoutLine, signal, cwd, env } = {}) {
+function runProcess(bin, args, { onStderrLine, onStdoutLine, signal, cwd, env, raw = false } = {}) {
   return new Promise((resolve, reject) => {
     if (!bin) return reject(new Error('未找到可执行文件'));
     const p = spawn(bin, args, { windowsHide: true, cwd, env: { ...process.env, ...(env || {}) }, signal });
     let stderr = '';
     let stdout = '';
+    const stdoutChunks = [];      // raw 模式：保留原始字节
     let tail = '';
     p.stdout.on('data', (d) => {
-      const s = d.toString('utf8');
-      stdout += s;
-      if (onStdoutLine) {
-        tail += s;
-        const lines = tail.split(/\r?\n/);
-        tail = lines.pop();
-        for (const l of lines) onStdoutLine(l);
+      if (raw) {
+        stdoutChunks.push(d);
+      } else {
+        const s = d.toString('utf8');
+        stdout += s;
+        if (onStdoutLine) {
+          tail += s;
+          const lines = tail.split(/\r?\n/);
+          tail = lines.pop();
+          for (const l of lines) onStdoutLine(l);
+        }
       }
     });
     p.stderr.on('data', (d) => {
@@ -142,15 +147,16 @@ function runProcess(bin, args, { onStderrLine, onStdoutLine, signal, cwd, env } 
       reject(Object.assign(e, { stderr }));
     });
     p.on('close', (code, sig) => {
-      if (code === 0) resolve({ stdout, stderr, code, signal: sig });
-      else if (signal?.aborted) {
+      if (code === 0) {
+        resolve({ stdout: raw ? Buffer.concat(stdoutChunks) : stdout, stderr, code, signal: sig });
+      } else if (signal?.aborted) {
         const err = new Error('已取消');
         err.cancelled = true;
         err.stderr = stderr;
         reject(err);
       } else {
         const e = new Error(`ffmpeg 退出码 ${code}${sig ? ` (${sig})` : ''}`);
-        e.code = code; e.signal = sig; e.stderr = stderr; e.stdout = stdout;
+        e.code = code; e.signal = sig; e.stderr = stderr; e.stdout = raw ? Buffer.concat(stdoutChunks) : stdout;
         reject(e);
       }
     });
@@ -437,6 +443,69 @@ async function runFfmpeg(args, { onProgress, signal, onLog } = {}) {
   });
 }
 
+/** 取一张 JPEG 的平均亮度（0-255），用于判断是否几乎全黑 */
+async function jpegLuma(dataUrl) {
+  const b64 = String(dataUrl).replace(/^data:image\/\w+;base64,/, '');
+  const buf = Buffer.from(b64, 'base64');
+  const { ffmpeg } = resolveBinaries();
+  return new Promise((resolve) => {
+    const p = spawn(ffmpeg, ['-hide_banner', '-v', 'error', '-i', 'pipe:0',
+      '-vf', 'scale=1:1,format=rgb24', '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'],
+    { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+    const chunks = [];
+    p.stdout.on('data', (d) => chunks.push(d));
+    p.on('close', () => {
+      const b = Buffer.concat(chunks);
+      if (b.length < 3) return resolve(null);
+      resolve(Math.round(0.299 * b[0] + 0.587 * b[1] + 0.114 * b[2]));
+    });
+    p.on('error', () => resolve(null));
+    try { p.stdin.end(buf); } catch { resolve(null); }
+  });
+}
+
+/** 亮度低于此值就认为「几乎全黑」，换一个时间点再试 */
+const BLACK_LUMA = 12;
+
+/**
+ * 取一张「有代表性」的预览图。
+ *
+ * 为什么不能直接取 0 秒：很多视频开头就是黑场或淡入，取 t=0 会得到一张全黑图，
+ * 用户看到会以为预览坏了。所以先试 10% 位置，若几乎全黑再依次试其它候选点，
+ * 选中亮度最高的一张；全都黑就如实返回（那是素材本身如此，不是故障）。
+ *
+ * @returns {{data:string, time:number, luma:number|null, allBlack:boolean}}
+ */
+async function previewThumbnail(o) {
+  const dur = Math.max(0, num(o.duration, 0));
+  const cands = [];
+  const push = (t) => {
+    const v = Math.max(0, Math.min(dur > 0 ? dur - 0.05 : 0, Number(t)));
+    if (!cands.some((x) => Math.abs(x - v) < 0.05)) cands.push(v);
+  };
+  push(o.time !== undefined ? o.time : dur * 0.1);
+  if (dur > 0) {
+    push(0);
+    push(dur * 0.25);
+    push(dur * 0.5);
+    push(dur * 0.75);
+    push(dur * 0.9);
+  }
+  if (!cands.length) cands.push(0);
+
+  let best = null;
+  for (const t of cands) {
+    try {
+      const data = await thumbnail({ input: o.input, time: t, width: o.width });
+      const luma = await jpegLuma(data);
+      if (best === null || (luma ?? -1) > (best.luma ?? -1)) best = { data, time: t, luma };
+      if ((luma ?? 0) >= BLACK_LUMA) break;      // 够亮就不再试
+    } catch { /* 该时间点不可用，试下一个 */ }
+  }
+  if (!best) throw new Error('无法生成预览图');
+  return { ...best, allBlack: (best.luma ?? 0) < BLACK_LUMA };
+}
+
 /* ------------------------------------------------------------------ */
 /* 视频版开机动画（Android 12+：bootanimation.mp4）                     */
 /* ------------------------------------------------------------------ */
@@ -525,7 +594,10 @@ function concatListContent(files) {
 
 /**
  * 生成一张预览缩略图（JPEG，base64 dataURL）
- * @param {object} o {input, time, width, filter}
+ *
+ * 注意：ffmpeg 输出的是二进制，必须用 raw 模式收原始 Buffer。
+ * 早先的写法是 `Buffer.from(stdout, 'binary')`，而 stdout 已经按 UTF-8 解码成字符串，
+ * 非法字节被替换成 U+FFFD，图片数据就损坏了 —— 表现为 <img> 解码失败、预览一片黑。
  */
 async function thumbnail(o) {
   const { ffmpeg } = resolveBinaries();
@@ -536,13 +608,16 @@ async function thumbnail(o) {
   args.push('-i', o.input, '-frames:v', '1');
   args.push('-vf', `scale=${tw}:-2:flags=lanczos`);
   args.push('-f', 'image2', '-c:v', 'mjpeg', '-q:v', '4', 'pipe:1');
-  const { stdout } = await runProcess(ffmpeg, args, {});
-  return 'data:image/jpeg;base64,' + Buffer.from(stdout, 'binary').toString('base64');
+  const { stdout } = await runProcess(ffmpeg, args, { raw: true });
+  if (!Buffer.isBuffer(stdout) || stdout.length < 128) {
+    throw new Error('缩略图为空（该时间点可能超出视频长度）');
+  }
+  return 'data:image/jpeg;base64,' + stdout.toString('base64');
 }
 
 module.exports = {
   resolveBinaries, probe, version, getVersion, parseVersion, runFfmpeg, runProcess,
-  buildScaleFilter, buildFrameArgs, buildAudioArgs, thumbnail,
+  buildScaleFilter, buildFrameArgs, buildAudioArgs, thumbnail, previewThumbnail, jpegLuma,
   buildVideoArgs, buildMuxAudioArgs, buildMp3Args, concatListContent,
   safePreset, X264_PRESETS,
   parseRate, streamRotation, normalizeProbe, pixHasAlpha,

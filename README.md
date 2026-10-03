@@ -187,7 +187,7 @@ BootAnimForge/
 node tools/fetch-ffmpeg.js        # 准备引擎
 node tools/selftest.js            # 后端端到端：75 项断言
 node tools/server-ctl.js start    # 起服务
-node tools/uicheck.js --flow      # 无头浏览器跑完整流程：35 项断言
+node tools/uicheck.js --flow      # 无头浏览器跑完整流程：38 项断言
 node tools/uicheck.js --anim      # 动效验证：14 项断言（MD3 运动系统）
 node tools/uicheck.js --docshot   # 重新生成 docs/ 下的截图
 node tools/make-portable.js       # 打便携包（含 ffmpeg 引擎）
@@ -211,6 +211,12 @@ node tools/make-portable.js       # 打便携包（含 ffmpeg 引擎）
 > 一个测试上的坑值得记下来：无头 Chromium 默认上报 `prefers-reduced-motion: reduce`，
 > 而本项目按无障碍要求为这个偏好把动画压到 1ms —— 于是动效断言全部"看起来失败"。
 > 现在测试用 CDP 的 `Emulation.setEmulatedMedia` 显式声明 `no-preference` 再测。
+
+> 另一个更值得记的坑：预览缩略图最初是把 ffmpeg 的 stdout 当 **UTF-8 字符串**收下来，
+> 再 `Buffer.from(str,'binary')` 转回二进制 —— 非法字节已被替换成 U+FFFD，JPEG 数据损坏，
+> `<img>` 解码失败后什么都不显示，**预览永远是一片黑**。
+> "元素存在 / 有 src" 这类断言完全发现不了这种问题，所以现在会实际检查
+> `naturalWidth > 8`、把图画进 canvas 算平均亮度、并校验 dataURL 的 JPEG 魔数。
 
 ---
 

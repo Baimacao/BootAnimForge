@@ -346,7 +346,7 @@ async function loadVideo(p, { silent = false } = {}) {
 
     saveState();
     renderImportSummary();
-    await refreshThumbnail(true);
+    await refreshThumbnail(true, false);   // 首次预览：允许挑一张有代表性的帧
     computeValidation();
     renderRail();
     $('#btn-start').textContent = '配置动画';
@@ -394,16 +394,22 @@ function renderImportSummary() {
 
 const thumbCache = new Map();
 
-async function refreshThumbnail(force = false) {
+/**
+ * @param {boolean} force 忽略缓存
+ * @param {boolean} exact true = 就取播放头这一帧（拖动时间轴时用）；
+ *                        false = 允许服务端挑一张有代表性的帧（避免片头黑场）
+ */
+async function refreshThumbnail(force = false, exact = true) {
   const info = state.info;
   if (!info) return;
   const t = clamp(Number(state.playhead) || 0, 0, Math.max(0, info.duration - 0.05));
-  const key = `${state.input}@${t.toFixed(2)}`;
+  const key = `${state.input}@${t.toFixed(2)}${exact ? '' : '#rep'}`;
   try {
     let data = !force && thumbCache.get(key);
     if (!data) {
-      const r = await api.thumbnail(state.input, t, 480);
-      if (!r.ok) return;
+      // 加载视频时带上 duration，服务端会挑一张不是全黑的代表帧（片头黑场很常见）
+      const r = await api.thumbnail(state.input, t, 480, exact ? 0 : info.duration);
+      if (!r.ok) { if (!exact) showPreviewNote(r.error || '预览不可用'); return; }
       data = r.data;
       if (thumbCache.size > 40) thumbCache.clear();
       thumbCache.set(key, data);
@@ -412,9 +418,23 @@ async function refreshThumbnail(force = false) {
     const img = $('#preview-img');
     img.src = data;
     img.hidden = false;
-    $('#preview-placeholder').hidden = true;
+    const ph = $('#preview-placeholder');
+    ph.hidden = true;
     $('#src-thumb').style.backgroundImage = `url("${data}")`;
-  } catch { /* 缩略图失败不影响主流程 */ }
+  } catch (e) {
+    if (!exact) showPreviewNote(e.message);
+  }
+}
+
+/** 预览拿不到图时，明确说明而不是留一块黑 */
+function showPreviewNote(text) {
+  const ph = $('#preview-placeholder');
+  const img = $('#preview-img');
+  if (img) img.hidden = true;
+  if (ph) {
+    ph.hidden = false;
+    ph.textContent = text ? `预览不可用\n${text}` : '预览不可用';
+  }
 }
 
 let stripTiles = [];
@@ -1227,6 +1247,7 @@ function renderPlayheadOnly() {
 /* ================================================================== */
 
 function computeValidation() {
+  ensureParts(state.info);          // 保证「至少一段」这一不变量，再算摘要
   state.validation = validate();
   state.plan = planParts();
   state.estimate = { ...estimateBytes(), duration: estimateDuration() };
