@@ -456,20 +456,40 @@ class CDP {
       await evalJs(`document.querySelector('.dialog-head .icon-btn').click()`);
       await sleep(500);
 
-      // 输出格式 + Magisk 模块设置（滚到对应位置）
-      await evalJs(`(()=>{const m=document.querySelector('#in-magisk');m.checked=true;m.dispatchEvent(new Event('change'));
-        document.querySelector('#magisk-opts').hidden=false;})()`);
+      // 输出格式 + Magisk 模块 + 帧命名（滚到对应位置）
+      // 必须先回到配置页：元素在别的视图里是隐藏的，getBoundingClientRect 全为 0，
+      // 滚动就会「算出来是 0」而什么都没发生（踩过）。
+      await evalJs(`window.__baf.actions.goStep(2)`);
       await sleep(700);
+      await evalJs(`(()=>{const m=document.querySelector('#in-magisk');m.checked=true;m.dispatchEvent(new Event('change'));})()`);
+      await sleep(600);
       const scrolled = await evalJs(`(() => {
         const el = document.querySelector('#format-modes');
-        const y = el.getBoundingClientRect().top + document.querySelector('#content').scrollTop - 90;
-        document.querySelector('#content').scrollTo({ top: y, behavior: 'instant' });
-        return document.querySelector('#content').scrollTop;
+        const host = document.querySelector('#content');
+        const y = el.getBoundingClientRect().top + host.scrollTop - 80;
+        host.scrollTo({ top: y, behavior: 'instant' });
+        return { scrollTop: host.scrollTop, boxH: Math.round(document.querySelector('#naming-box').getBoundingClientRect().height) };
       })()`);
       await sleep(900);
       const fs2 = await cdp.send('Page.captureScreenshot', { format: 'png' });
       fs.writeFileSync(path.join(docDir, 'screenshot-output.png'), Buffer.from(fs2.data, 'base64'));
-      console.log(`文档截图：docs/screenshot-output.png（scrollTop=${scrolled}）`);
+      console.log(`文档截图：docs/screenshot-output.png（scrollTop=${scrolled.scrollTop} 命名单元高度=${scrolled.boxH}）`);
+
+      // 帧命名面板单独来一张（把 Magisk 关掉，画面更干净）
+      await evalJs(`(()=>{const m=document.querySelector('#in-magisk');m.checked=false;m.dispatchEvent(new Event('change'));
+        const chip=[...document.querySelectorAll('[data-naming]')].find(c=>c.dataset.naming==='|3|1'); chip.click();})()`);
+      await sleep(700);
+      const scrolled2 = await evalJs(`(() => {
+        const el = document.querySelector('#naming-box');
+        const host = document.querySelector('#content');
+        const y = el.getBoundingClientRect().top + host.scrollTop - 110;
+        host.scrollTo({ top: y, behavior: 'instant' });
+        return host.scrollTop;
+      })()`);
+      await sleep(900);
+      const fs3 = await cdp.send('Page.captureScreenshot', { format: 'png' });
+      fs.writeFileSync(path.join(docDir, 'screenshot-naming.png'), Buffer.from(fs3.data, 'base64'));
+      console.log(`文档截图：docs/screenshot-naming.png（scrollTop=${scrolled2}）`);
     }
 
     // ---------- 动效验证（--anim） ----------
