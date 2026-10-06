@@ -1,18 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  开机动画工坊 · 安卓版
+  启幕 · 安卓版
   minSdk 19（Android 4.4）：向下兼容到能见到的绝大多数设备
   targetSdk 30：本机 SDK 只到 API 30；高版本 Android 上靠运行时判断来适配
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.baimacao.bootanimforge"
-    android:versionCode="120"
-    android:versionName="1.2.0">
+    android:versionCode="130"
+    android:versionName="1.3.0">
 
     <uses-sdk
         android:minSdkVersion="19"
         android:targetSdkVersion="30" />
-
     <!-- 读取用户选择的 zip / 备份到公共目录（旧版本用） -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
@@ -41,5 +40,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 制作页：选视频 → 参数 → 生成 bootanimation.zip -->
+        <activity
+            android:name=".CreatorActivity"
+            android:exported="false"
+            android:label="@string/make_title"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|density" />
     </application>
 </manifest>

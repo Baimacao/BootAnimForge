@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">开机动画工坊</string>
+    <string name="app_name">启幕</string>
+    <string name="app_subtitle">开机动画 · 制作与刷入</string>
+    <string name="make_title">制作开机动画</string>
 </resources>

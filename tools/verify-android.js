@@ -96,7 +96,7 @@ function dexContains(buf, s) {
   ok('包名正确', /package: name='com\.baimacao\.bootanimforge'/.test(d), (d.match(/package:[^\n]*/) || [''])[0]);
   ok('minSdkVersion = 19（Android 4.4，向下兼容）', /minSdkVersion:'19'/.test(d), (d.match(/minSdkVersion:'\d+'/) || [''])[0]);
   ok('targetSdkVersion = 30', /targetSdkVersion:'30'/.test(d), (d.match(/targetSdkVersion:'\d+'/) || [''])[0]);
-  ok('应用名称为中文', /application-label:'开机动画工坊'/.test(d) || /application-label-zh/.test(d), (d.match(/application-label[^\n]*/) || [''])[0]);
+  ok('应用名称为中文', /application-label:'启幕'/.test(d) || /application-label-zh/.test(d), (d.match(/application-label[^\n]*/) || [''])[0]);
   ok('声明了启动 Activity', /launchable-activity: name='com\.baimacao\.bootanimforge\.MainActivity'/.test(d));
   ok('watch 特性声明为非必需（手机/手表都能装）',
     /uses-feature-not-required: name='android\.hardware\.type\.watch'/.test(d),
@@ -110,11 +110,17 @@ function dexContains(buf, s) {
   const dex = z.get('classes.dex');
   const classNames = [
     'Lcom/baimacao/bootanimforge/MainActivity;',
+    'Lcom/baimacao/bootanimforge/CreatorActivity;',
     'Lcom/baimacao/bootanimforge/RootShell;',
     'Lcom/baimacao/bootanimforge/BootScanner;',
     'Lcom/baimacao/bootanimforge/BootCore;',
     'Lcom/baimacao/bootanimforge/BackupManager;',
     'Lcom/baimacao/bootanimforge/ScreenShape;',
+    'Lcom/baimacao/bootanimforge/Creator;',
+    'Lcom/baimacao/bootanimforge/PngEncoder;',
+    'Lcom/baimacao/bootanimforge/ZipStoreWriter;',
+    'Lcom/baimacao/bootanimforge/AndroidFrameSource;',
+    'Lcom/baimacao/bootanimforge/VideoProbe;',
   ];
   for (const c of classNames) ok('包含类 ' + c.replace(/^L|;$/g, '').split('/').pop(), dexContains(dex, c));
 
@@ -135,6 +141,17 @@ function dexContains(buf, s) {
     ['强制方形', '方形手动覆盖选项'],
     ['需要 root', '前置条件提示'],
     ['还原上一个备份', '回滚入口'],
+    // 制作（新增）
+    ['开始制作', '制作入口'],
+    ['选择视频文件', '视频选择'],
+    ['手表 480 × 480', '手表分辨率预设'],
+    ['手机 1080 × 2400', '手机分辨率预设'],
+    ['001.png（手表）', '帧命名预设'],
+    ['frame_00000', '通用帧命名'],
+    ['纯数字', '纯数字命名说明'],
+    ['留边不拉伸', '不拉伸说明'],
+    ['正在制作', '进度状态'],
+    ['制作完成', '完成提示'],
   ];
   for (const [s, what] of must) ok(`含「${s}」（${what}）`, dexContains(dex, s));
 
@@ -144,6 +161,17 @@ function dexContains(buf, s) {
   ok('用了 RippleDrawable（有版本判断）', dexContains(dex, 'RippleDrawable') || dexContains(dex, 'Landroid/graphics/drawable/RippleDrawable;'));
   ok('用了 od 而不是 xxd 读文件头（精简 ROM 兼容）', dexContains(dex, 'od -An -tx1 -N 4'));
   ok('su 路径有多候选回退', dexContains(dex, '/system/xbin/su') && dexContains(dex, '/debug_ramdisk/su'));
+  // 制作相关的兼容写法
+  // 注意：METADATA_KEY_VIDEO_ROTATION / OPTION_CLOSEST 都是 static final int 常量，
+  // javac 会把它们**内联**成字面量，所以 DEX 里搜不到这些名字 —— 不能拿它们当断言，
+  // 否则会得到"明明写了却验不到"的假失败。改验方法名与类名。
+  ok('用 MediaMetadataRetriever 取帧（框架 API，无第三方库）', dexContains(dex, 'MediaMetadataRetriever'));
+  ok('调用了 getFrameAtTime（取帧入口）', dexContains(dex, 'getFrameAtTime'));
+  ok('调用了 extractMetadata（读旋转/时长/帧率）', dexContains(dex, 'extractMetadata'));
+  ok('调用了 Bitmap.createBitmap（ARGB_8888 像素搬运）', dexContains(dex, 'createBitmap'));
+  ok('实现 FrameSource（可测试的取帧抽象）', dexContains(dex, 'FrameSource'));
+  ok('PNG 由自己编码（不依赖 Bitmap.compress 生成 PNG）', dexContains(dex, 'PngEncoder'));
+  ok('zip 用自己写的 STORE 写入器', dexContains(dex, 'ZipStoreWriter'));
 
   /* ---------- 6. 签名 ---------- */
   section('6. 签名与对齐');

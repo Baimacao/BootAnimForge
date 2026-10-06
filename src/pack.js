@@ -46,7 +46,7 @@ async function buildMagiskModule(o) {
   const versionCode = Number(o.versionCode) || Math.round(parseFloat(String(version).replace(/[^\d.]/g, '')) * 100) || 1;
   const name = String(o.name || '开机动画').slice(0, 60);
   const author = String(o.author || 'BootAnimForge').slice(0, 40);
-  const description = String(o.description || '由开机动画工坊生成的 Magisk 开机动画模块').slice(0, 200);
+  const description = String(o.description || '由启幕生成的 Magisk 开机动画模块').slice(0, 200);
   const kindText = o.kind === 'video' ? '视频版（Android 12+）' : '传统帧序列版';
 
   const targets = o.allPaths ? SYSTEM_PATHS.map((p) => p.dir) : [o.pathKey || 'system/media'];
@@ -72,7 +72,7 @@ async function buildMagiskModule(o) {
     `[ -f $MODPATH/${t}/${f} ] && ui_print "    /${t.replace(/^system\//, '')}/${f}"`));
 
   const cust = `#!/system/bin/sh
-# 开机动画工坊 · BootAnimForge 生成的 Magisk 模块
+# 启幕（BootAnimForge） 生成的 Magisk 模块
 # 载荷：${fileNames.join('、')}（${kindText}）
 SKIPUNZIP=0
 
@@ -89,7 +89,7 @@ ui_print " "
 
   /* --- README（可选） --- */
   if (o.withReadme !== false) {
-    const readme = `开机动画工坊 · BootAnimForge
+    const readme = `启幕（BootAnimForge）
 ================================
 
 模块名：${name}

@@ -90,7 +90,7 @@ async function main() {
 
   // 附一份「先看这个」
   zip.add('使用说明.txt', Buffer.from(
-    `开机动画工坊 BootAnimForge ${VERSION}（便携版 · 无需任何前置）
+    `启幕 BootAnimForge ${VERSION}（便携版 · 无需任何前置）
 ================================================
 
 这个包里已经带好：

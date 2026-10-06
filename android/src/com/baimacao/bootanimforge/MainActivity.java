@@ -39,7 +39,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * MainActivity —— 开机动画工坊（安卓版）：刷入 / 备份 / 还原。
+ * MainActivity —— 启幕（安卓版）：刷入 / 备份 / 还原。
  *
  * 为什么安卓版做「刷入器」而不是「转换器」：
  *   安卓端跑的就是要装动画的那台设备，所以它最缺的不是算力，而是
@@ -95,6 +95,40 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         buildUi();
         refreshAll();
+        handleExternalInstall(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleExternalInstall(intent);
+    }
+
+    /**
+     * 从「制作」页跳回来时，它会把刚生成的 zip 路径带过来。
+     * 这里复用既有的「校验 → 安装 → 自动备份」流程，不另开一套逻辑。
+     */
+    private void handleExternalInstall(Intent intent) {
+        if (intent == null) return;
+        final String path = intent.getStringExtra("install_path");
+        if (path == null || path.length() == 0) return;
+        intent.removeExtra("install_path");
+        final File f = new File(path);
+        if (!f.exists()) { toast("找不到刚生成的包"); return; }
+        new Thread(new Runnable() {
+            public void run() {
+                final BootCore.Report rep = BootCore.validate(f);
+                ui.post(new Runnable() {
+                    public void run() {
+                        staged = f;
+                        stagedReport = rep;
+                        showReport(rep);
+                        toast(rep.valid ? "制作产物已就绪，可点安装" : "产物校验未通过");
+                    }
+                });
+            }
+        }).start();
     }
 
     @Override
@@ -125,12 +159,32 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         // ---- 顶部标识 ----
-        TextView title = text("开机动画工坊", 22, C_ON_SURFACE, true);
+        TextView title = text("启幕", 22, C_ON_SURFACE, true);
         content.addView(title);
         TextView sub = text("BootAnimForge · 安卓版 · 刷入 / 备份 / 还原", 12, C_ON_SURF_VAR, false);
         LinearLayout.LayoutParams subLp = lp(-1, -2);
         subLp.bottomMargin = dp(16);
         content.addView(sub, subLp);
+
+        // ---- 制作入口 ----
+        LinearLayout makeCard = card();
+        makeCard.addView(sectionHead("制作开机动画"));
+        makeCard.addView(text("在手机上把一段视频做成 bootanimation.zip。适合「截几秒 + 改成手表分辨率 + 直接装上」这种场景；"
+                + "长视频与多段拆分建议用电脑端。", 12, C_ON_SURF_VAR, false));
+        Button makeBtn = primaryButton("打开制作");
+        makeBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                try {
+                    startActivity(new Intent(MainActivity.this, CreatorActivity.class));
+                } catch (Throwable t) {
+                    toast("打不开制作页：" + t.getMessage());
+                }
+            }
+        });
+        LinearLayout.LayoutParams mbLp = lp(-1, dp(48));
+        mbLp.topMargin = dp(12);
+        makeCard.addView(makeBtn, mbLp);
+        content.addView(makeCard);
 
         // ---- 状态卡片 ----
         LinearLayout statusCard = card();

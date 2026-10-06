@@ -102,7 +102,7 @@ public final class BootCore {
                 if (hasMp3) r.notes.add("包含独立音轨 audio.mp3");
                 try {
                     r.moovFirst = moovIsFirst(zf, e);
-                    if (!r.moovFirst) r.warnings.add("moov 不在文件头：开机需要读完整个视频才能出画面，建议用「开机动画工坊」PC 版重新导出");
+                    if (!r.moovFirst) r.warnings.add("moov 不在文件头：开机需要读完整个视频才能出画面，建议用「启幕」PC 版重新导出");
                     else r.notes.add("moov 在文件头（起播快）");
                 } catch (Throwable ignored) { }
                 if (hasDesc) r.notes.add("同时含 desc.txt —— 新旧混合包，系统读哪个取决于机型");

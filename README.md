@@ -1,14 +1,12 @@
-# 开机动画工坊 · BootAnimForge
+# 启幕 · 开机动画制作
 
-把 MP4 等视频转成安卓开机动画（`bootanimation.zip`）的 Windows 工具，并可直接产出**可刷入的 Magisk 模块**。
+把 MP4 等视频做成安卓开机动画（`bootanimation.zip`）。**Windows 端与安卓端都能制作**，安卓端还能直接刷入。
 
-**附带安卓端 App**：负责把动画**装进设备** —— 自动找路径、设权限、备份与还原、圆屏适配。
-PC 端负责生成，手机/手表端负责刷入。
+- **PC 端**：功能完整 —— 时间轴分段、每段循环次数/暂停、两种输出格式（传统帧序列 / Android 12+ 视频版）、Magisk 模块一键生成
+- **安卓端**：手机上直接读视频出 zip，并负责刷入 —— 扫描路径、Root 安装、自动备份、一键还原、圆屏适配
 
-界面是 Material Design 3 风格，带非线性动效（MD3 emphasized 曲线、shared-axis X 转场）、实时预览、时间轴分段编辑器和内置教程。
-引擎是本地 ffmpeg，界面在独立的 Edge 应用窗口里运行 —— 不依赖 Electron，改代码不用编译。
-
-**无需任何前置**：双击启动器即可，Node 运行时与 ffmpeg 引擎都由程序自己准备。
+界面是 Material Design 3 风格，带非线性动效（MD3 emphasized 曲线、shared-axis X 转场）、实时预览与内置教程。
+PC 端引擎是本地 ffmpeg，界面在独立的 Edge 应用窗口里运行 —— 不依赖 Electron，改代码不用编译；**无需任何前置**：Node 运行时与 ffmpeg 都由程序自己准备。
 
 ![配置页](docs/screenshot-configure.png)
 
@@ -16,11 +14,11 @@ PC 端负责生成，手机/手表端负责刷入。
 
 ## 两个端的分工
 
-| | PC 端（Windows） | 安卓端（本仓库 `android/`） |
+| | PC 端（Windows） | 安卓端（`android/`） |
 |---|---|---|
-| 职责 | **生成** bootanimation.zip / Magisk 模块 | **刷入**：安装、备份、还原 |
-| 为什么这样分 | 有 ffmpeg、有算力、界面好操作 | 它就装在目标设备上，最清楚"文件该放哪" |
-| 形态 | 双击 `启动.cmd`，独立应用窗口 | APK，minSdk 19 / 圆屏适配 |
+| 制作 | 完整：多段拆分、循环/暂停、两种输出格式、Magisk 模块 | 基础：单段、分辨率/帧率/帧命名可调 |
+| 刷入 | — | 扫描路径、Root 安装、自动备份、一键还原 |
+| 适合 | 长视频、复杂分段、批量处理 | 外出时"截几秒 + 改成手表分辨率 + 直接装上" |
 
 安卓端的详细说明见 **[docs/android.md](docs/android.md)**。
 
@@ -203,14 +201,20 @@ BootAnimForge/
 │   └── js/{app,core,data}.js 交互 / 状态与 API / 预设与文案
 ├── android/                  安卓端 App（Java 8 / minSdk 19 / 无 androidx）
 │   ├── AndroidManifest.xml
-│   ├── res/                  MD3 色板、主题、图标
+│   ├── res/                  MD3 色板、主题、图标（弧 + 点）
 │   └── src/com/baimacao/bootanimforge/
-│       ├── MainActivity.java   界面、选包、安装流程、圆屏设置
-│       ├── RootShell.java      su 执行、权限与 SELinux 上下文
-│       ├── BootScanner.java    扫描所有候选路径 + Magisk 模块检测
-│       ├── BootCore.java       包解析与校验（纯 JDK，可在 PC 上测）
-│       ├── BackupManager.java  自动备份 + 一键还原
-│       └── ScreenShape.java    圆屏判断与安全区
+│       ├── MainActivity.java      刷入界面、状态扫描、圆屏设置
+│       ├── CreatorActivity.java   制作界面：选视频 → 参数 → 生成
+│       ├── Creator.java           制作流水线（等比缩放 + 留边、绝不拉伸）
+│       ├── PngEncoder.java        自写 PNG 编码器（不依赖 Bitmap.compress）
+│       ├── ZipStoreWriter.java    自写 STORE zip 写入器（规范要求不压缩）
+│       ├── AndroidFrameSource.java 用 MediaMetadataRetriever 取帧（含旋转处理）
+│       ├── VideoProbe.java        视频元信息探测
+│       ├── RootShell.java         su 执行、权限与 SELinux 上下文
+│       ├── BootScanner.java       扫描所有候选路径 + Magisk 模块检测
+│       ├── BootCore.java          包解析与校验（纯 JDK，可在 PC 上测）
+│       ├── BackupManager.java     自动备份 + 一键还原
+│       └── ScreenShape.java       圆屏判断与安全区
 ├── tools/
 │   ├── fetch-node.ps1        获取便携 Node 运行时（首次运行自动调用）
 │   ├── fetch-ffmpeg.js       获取 ffmpeg 运行时（多源回退）
@@ -255,12 +259,14 @@ node tools/server-ctl.js start     # 起服务
 node tools/uicheck.js --flow       # 无头浏览器跑完整流程：47 项断言
 node tools/uicheck.js --anim       # 动效验证：14 项断言（MD3 运动系统）
 node tools/uicheck.js --docshot    # 重新生成 docs/ 下的截图
-node tools/make-portable.js 1.2.0  # 打便携包（含 Node + ffmpeg，解压即用）
+node tools/make-icons.js           # 生成应用图标
+node tools/make-portable.js 1.3.0  # 打便携包（含 Node + ffmpeg + APK，解压即用）
 
 # 安卓端（不需要 Gradle / AGP）
 node tools/build-android.js        # 构建 APK → dist/android/
-node tools/verify-android.js       # APK 静态验证：43 项断言
-node tools/coretest-android.js     # 在 PC 上真跑安卓端的包解析逻辑：31 项断言
+node tools/verify-android.js       # APK 静态验证：66 项断言
+node tools/coretest-android.js     # 在 PC 上真跑包解析逻辑：31 项断言
+node tools/creatortest-android.js  # 在 PC 上真跑制作核心（PNG/zip/缩放）：34 项断言
 ```
 
 `selftest.js` 会用 ffmpeg 合成测试素材（横屏、旋转、带 alpha），覆盖：
