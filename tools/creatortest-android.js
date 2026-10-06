@@ -230,6 +230,56 @@ public class CoreTest {
   ok('desc.txt 用 CRLF 结尾', /\\r\\n$/.test(descLine), JSON.stringify(descLine));
   ok('desc.txt 首行 = 480 480 15', descLine.startsWith('480 480 15'), descLine);
 
+  const field = (k) => (res.out.match(new RegExp('^' + k + '\\t(.*)$', 'm')) || [])[1] || '';
+
+  /* ---------- 5. 关机动画 ---------- */
+  section('5. 关机动画（文件名与段类型）');
+  ok('开机产物是 bootanimation.zip', field('BOOTFILE') === 'bootanimation.zip', field('BOOTFILE'));
+  ok('关机产物是 shutdownanimation.zip', field('SHUTFILE') === 'shutdownanimation.zip', field('SHUTFILE'));
+  ok('开机视频版是 bootanimation.mp4', field('BOOTVIDEO') === 'bootanimation.mp4', field('BOOTVIDEO'));
+  ok('关机视频版是 shutdownanimation.mp4', field('SHUTVIDEO') === 'shutdownanimation.mp4', field('SHUTVIDEO'));
+  ok('中文标签正确', field('BOOTLABEL') === '开机动画' && field('SHUTLABEL') === '关机动画',
+    field('BOOTLABEL') + '/' + field('SHUTLABEL'));
+  ok('关机 desc 用 c（必须播完）', /^480 480 15\\r\\nc 0 0 part0\\r\\n$/.test(field('DESCSHUT')), field('DESCSHUT'));
+  ok('开机 desc 仍是 p', /^480 480 15\\r\\np 0 0 part0\\r\\n$/.test(descLine), descLine);
+  // Creator.Part 不携带 fade 值，所以 f 类型不带第四个字段（fade 省略即为 0）
+  ok('partType=f 时段类型变 f', /^480 480 15\\r\\nf 0 0 part0\\r\\n$/.test(field('DESCEXPLICIT')),
+    field('DESCEXPLICIT'));
+  ok('段自身带类型时优先于 partType', /^480 480 15\\r\\np 0 0 part0\\r\\n$/.test(field('DESCTYPE')), field('DESCTYPE'));
+
+  /* ---------- 6. 取用区间 ---------- */
+  section('6. 取用区间');
+  ok('起点 1.0s 被采纳', Number(field('TRIMSTART')) === 1, field('TRIMSTART'));
+  ok('终点 2.0s 被采纳', Number(field('TRIMEND')) === 2, field('TRIMEND'));
+  ok('帧数 = 1s × 10fps = 10', Number(field('TRIMFRAMES')) === 10, field('TRIMFRAMES'));
+  ok('终点超过视频时长时被夹到结尾', Number(field('CLIPEND')) === 10, field('CLIPEND'));
+
+  /* ---------- 7. 转换与取消 ---------- */
+  section('7. 真跑一次转换 + 取消');
+  ok('产物文件名是 shutdownanimation.zip', field('RUNNAME') === 'made-shutdown.zip', field('RUNNAME'));
+  ok('只生成区间内的 10 帧', Number(field('RUNFRAMES')) === 10, field('RUNFRAMES'));
+  ok('只向视频源取了 10 次帧', Number(field('RUNTAKEN')) === 10, field('RUNTAKEN'));
+  ok('产物非空', Number(field('RUNBYTES')) > 0, field('RUNBYTES'));
+  ok('取消时抛 InterruptedException', field('CANCELERR') === 'InterruptedException', field('CANCELERR'));
+  ok('取消后不留下半成品', field('CANCELFILEEXISTS') === 'false', field('CANCELFILEEXISTS'));
+
+  // 用 BootCore 校验真跑出来的关机产物
+  const shutZip = path.join(OUT, 'made-shutdown.zip');
+  if (fs.existsSync(shutZip)) {
+    const bc = await run(path.join(JAVA_HOME, 'bin', 'java.exe'),
+      ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', classes, 'CoreTest', shutZip], WORK)
+      .catch((e) => ({ out: '', err: e.message }));
+    ok('BootCore 判定关机产物合法', /VALID\ttrue/.test(bc.out || ''),
+      (bc.out || '').split('\n').filter((l) => l.startsWith('ERR')).join(' | '));
+    ok('关机产物被识别为 64×64 / 10fps',
+      /SIZE\t64x64/.test(bc.out || '') && /FPS\t10/.test(bc.out || ''));
+    // 直接读包里的 desc.txt，确认段类型真的是 c
+    const { readZip } = require('../src/zip.js');
+    const z2 = await readZip(shutZip);
+    const d2 = z2.get('desc.txt').toString('utf8');
+    ok('真跑产物的 desc.txt 段类型是 c', /^c\s/m.test(d2), JSON.stringify(d2));
+  }
+
   console.log(lines.join('\n'));
   console.log(`\n结果：${pass} 通过 / ${fail} 失败\n`);
   console.log('说明：以上 PNG/zip 全部由**安卓端将要运行的那份手写代码**产出，');

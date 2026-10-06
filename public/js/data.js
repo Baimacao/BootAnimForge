@@ -71,6 +71,28 @@ export const SCALE_MODES = [
   },
 ];
 
+/* ---------------- 操作对象：开机 / 关机动画 ---------------- */
+export const TARGET_MODES = [
+  {
+    id: 'boot',
+    name: '开机动画',
+    hint: 'bootanimation.zip —— 开机时播放',
+    detail: '最常用',
+    tone: 'ok',
+    file: 'bootanimation.zip',
+    path: '/system/media/bootanimation.zip',
+  },
+  {
+    id: 'shutdown',
+    name: '关机动画',
+    hint: 'shutdownanimation.zip —— 关机时播放',
+    detail: '格式相同 · 用「必须播完」类型',
+    tone: 'info',
+    file: 'shutdownanimation.zip',
+    path: '/system/media/shutdownanimation.zip',
+  },
+];
+
 /* ---------------- 输出格式 ---------------- */
 export const FORMAT_MODES = [
   {
@@ -211,9 +233,44 @@ export const HELP = {
     title: '输出目录',
     body: `生成好的 bootanimation.zip 放在哪里。留空则放在程序目录下的 output 文件夹。`,
   },
+  target: {
+    title: '开机动画还是关机动画？',
+    body: `两者**格式完全相同**（\`desc.txt\` + \`partN\` 帧，或 Android 12+ 的视频版 mp4），区别只在文件名与播放时机：
+
+| | 文件名 | 什么时候播 |
+|---|---|---|
+| 开机动画 | \`bootanimation.zip\` | 开机过程中 |
+| 关机动画 | \`shutdownanimation.zip\` | 关机过程中 |
+
+**重要差别：段类型**
+关机动画默认把段类型设成 \`c\`（必须播完）—— 系统关掉之前要保证整段放完，用 \`p\` 的话可能刚播一半就被掐掉。
+开机动画保持 \`p\`（可被打断），这样系统起得快就不会卡在动画上。
+
+**注意**：关机动画的路径与文件名**没有 AOSP 级的统一规范**，各厂商自定义较多。
+常见位置是 \`/system/media/shutdownanimation.zip\`、\`/product/media/shutdownanimation.zip\`。
+刷入前建议先在设备上确认原本有没有这个文件、放在哪。
+
+Magisk 模块也会跟着换文件名的模块 id 与描述，两个动画可以分别做两个模块。`,
+  },
+  trim: {
+    title: '取用区间是什么？',
+    body: `指从原视频里**取哪一段**来做动画，单位是秒。
+
+- **起**：从第几秒开始取（默认 0）
+- **止**：取到第几秒（默认 0 = 一直取到视频结尾）
+
+可以直接拖上面那根滑块，也可以填数字，两者是联动的。
+
+**为什么要用它**
+- 视频很长时只截前几秒，帧数少了生成就快、包也小得多
+- 片头片尾常有黑场或水印，截掉后循环更顺
+- 想做成"完美循环"时，取一段首尾能接上的区间
+
+**注意**：如果分段列表里已经有多个段，拖动滑块会同时调整首段的起点与末段的终点 ——
+中间段的边界请在上面的分段里单独改。`,
+  },
   naming: {
-    title: '帧文件怎么命名？',
-    body: `zip 里每一帧都是一个独立文件，文件名必须能排出正确顺序。不同厂商写法差别很大，所以要能自己定。
+    title: '帧文件怎么命名？',    body: `zip 里每一帧都是一个独立文件，文件名必须能排出正确顺序。不同厂商写法差别很大，所以要能自己定。
 
 三个参数：
 

@@ -492,6 +492,69 @@ async function main() {
       (e.validation?.errors || [e.message]).join('；'));
   }
 
+  /* ---------------- 关机动画 ---------------- */
+  section('关机动画（与开机同格式，不同文件名与段类型）');
+  {
+    const shutReq = {
+      input: src16x9, outputDir: OUT, outputName: 'test-shutdown.zip',
+      target: 'shutdown',
+      format: 'classic', width: 480, height: 480, fps: 15, framePrefix: '', padWidth: 3, startNumber: 1,
+      parts: [{ dir: 'part0', count: 0, pause: 0, start: 0, end: 1 }],
+    };
+    const a = await convert.run(shutReq, { onLog: () => {} });
+    ok('关机动画产出成功', a.ok === true);
+    ok('结果里带 target=shutdown', a.target === 'shutdown', String(a.target));
+    ok('靶标标签正确', a.targetLabel === '关机动画', String(a.targetLabel));
+
+    const z = await readZip(a.output);
+    const desc = z.get('desc.txt').toString('utf8');
+    ok('desc 用 c（必须播完）而不是 p', /^c\s/m.test(desc), JSON.stringify(desc));
+    ok('desc 首行仍是 480 480 15', desc.startsWith('480 480 15'), JSON.stringify(desc));
+
+    // 与开机动画对比：除了段类型，其他应完全一致
+    const bootReq = { ...shutReq, target: 'boot', outputName: 'test-bootcmp.zip' };
+    const b = await convert.run(bootReq, { onLog: () => {} });
+    const zb = await readZip(b.output);
+    const descB = zb.get('desc.txt').toString('utf8');
+    ok('开机动画仍用 p', /^p\s/m.test(descB), JSON.stringify(descB));
+    ok('两者只有段类型不同', desc.replace(/^c/m, 'p') === descB, `${JSON.stringify(desc)} vs ${JSON.stringify(descB)}`);
+
+    // 视频版：文件名应为 shutdownanimation.mp4
+    const v = await convert.run({ ...shutReq, format: 'video', outputName: 'test-shutdown-video.zip' },
+      { onLog: () => {} });
+    const zv = await readZip(v.output);
+    ok('视频版产出 shutdownanimation.mp4', [...zv.keys()].some((k) => k.endsWith('shutdownanimation.mp4')),
+      [...zv.keys()].join(','));
+    ok('视频版不含 bootanimation.mp4', ![...zv.keys()].some((k) => k.endsWith('bootanimation.mp4')));
+
+    // Magisk 模块：id / 名字 / 载荷都应跟着关机走
+    const m = await convert.run({ ...shutReq, magisk: true, magiskOpts: {}, outputName: 'test-shutdown-magisk.zip' },
+      { onLog: () => {} });
+    const zm = await readZip(m.output);
+    const prop = zm.get('module.prop').toString('utf8');
+    ok('关机模块 id 与开机模块区分开', /id=bootanimforge_shutdownanimation/.test(prop),
+      (prop.match(/id=.*/) || [''])[0]);
+    ok('关机模块名字是「关机动画」', /name=关机动画/.test(prop), (prop.match(/name=.*/) || [''])[0]);
+    ok('模块载荷是 shutdownanimation.zip',
+      [...zm.keys()].some((k) => k.endsWith('/shutdownanimation.zip')),
+      [...zm.keys()].filter((k) => k.endsWith('.zip')).join(','));
+    ok('模块不误带 bootanimation.zip', ![...zm.keys()].some((k) => k.endsWith('/bootanimation.zip')));
+
+    // 用户显式给了段类型时不应被 target 覆盖
+    const exp = await convert.run({
+      ...shutReq, outputName: 'test-shutdown-explicit.zip',
+      parts: [{ dir: 'part0', type: 'p', count: 0, pause: 0, start: 0, end: 1 }],
+    }, { onLog: () => {} });
+    const ze = await readZip(exp.output);
+    ok('用户显式指定段类型时不被覆盖', /^p\s/m.test(ze.get('desc.txt').toString('utf8')),
+      JSON.stringify(ze.get('desc.txt').toString('utf8')));
+
+    // 未知 target 应安全回落到开机
+    const unk = await convert.run({ ...shutReq, target: 'nonsense', outputName: 'test-unknown-target.zip' },
+      { onLog: () => {} });
+    ok('未知 target 安全回落为开机动画', unk.target === 'boot', String(unk.target));
+  }
+
   /* ---------------- 汇总 ---------------- */
   console.log(results.join('\n'));
   console.log(`\n结果：${pass} 通过 / ${fail} 失败\n`);

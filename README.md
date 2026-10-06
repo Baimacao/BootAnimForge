@@ -1,9 +1,10 @@
 # 启幕 · 开机动画制作
 
-把 MP4 等视频做成安卓开机动画（`bootanimation.zip`）。**Windows 端与安卓端都能制作**，安卓端还能直接刷入。
+把 MP4 等视频做成安卓**开机动画 / 关机动画**（`bootanimation.zip` / `shutdownanimation.zip`）。
+**Windows 端与安卓端都能制作**，安卓端还能直接刷入。
 
-- **PC 端**：功能完整 —— 时间轴分段、每段循环次数/暂停、两种输出格式（传统帧序列 / Android 12+ 视频版）、Magisk 模块一键生成
-- **安卓端**：手机上直接读视频出 zip，并负责刷入 —— 扫描路径、Root 安装、自动备份、一键还原、圆屏适配
+- **PC 端**：功能完整 —— 时间轴分段、每段循环次数/暂停、取用区间滑块、两种输出格式（传统帧序列 / Android 12+ 视频版）、Magisk 模块一键生成
+- **安卓端**：手机上直接读视频出 zip（含关机动画），并负责刷入 —— 扫描路径、Root 安装、自动备份、一键还原、圆屏适配、预览
 
 界面是 Material Design 3 风格，带非线性动效（MD3 emphasized 曲线、shared-axis X 转场）、实时预览与内置教程。
 PC 端引擎是本地 ffmpeg，界面在独立的 Edge 应用窗口里运行 —— 不依赖 Electron，改代码不用编译；**无需任何前置**：Node 运行时与 ffmpeg 都由程序自己准备。
@@ -16,11 +17,25 @@ PC 端引擎是本地 ffmpeg，界面在独立的 Edge 应用窗口里运行 —
 
 | | PC 端（Windows） | 安卓端（`android/`） |
 |---|---|---|
-| 制作 | 完整：多段拆分、循环/暂停、两种输出格式、Magisk 模块 | 基础：单段、分辨率/帧率/帧命名可调 |
+| 制作 | 完整：多段拆分、循环/暂停、取用区间、两种输出格式、Magisk 模块 | 单段、分辨率/帧率/帧命名/取用区间可调 |
 | 刷入 | — | 扫描路径、Root 安装、自动备份、一键还原 |
+| 预览 | 实时预览 + 时间轴 | 制作前按参数取帧 + 预览设备上当前的动画 |
 | 适合 | 长视频、复杂分段、批量处理 | 外出时"截几秒 + 改成手表分辨率 + 直接装上" |
 
 安卓端的详细说明见 **[docs/android.md](docs/android.md)**。
+
+---
+
+## 开机动画 / 关机动画
+
+| | 开机动画 | 关机动画 |
+|---|---|---|
+| 文件名 | `bootanimation.zip` | `shutdownanimation.zip` |
+| 段类型 | `p`（可被打断） | `c`（必须播完，否则可能播一半就被关掉） |
+| 常见路径 | `/system/media`、`/product/media`、`/oem/media` | 同左 |
+
+⚠ 关机动画的路径与文件名**没有 AOSP 级的统一规范**，各厂商自定义较多，部分机型根本不支持。
+刷入前建议先确认设备上原本有没有这个文件、放在哪。
 
 ---
 
@@ -254,19 +269,19 @@ BootAnimForge/
 # PC 端
 node tools/fetch-node.ps1          # 准备便携 Node 运行时（无前置安装用）
 node tools/fetch-ffmpeg.js         # 准备 ffmpeg 引擎
-node tools/selftest.js             # 后端端到端：94 项断言
+node tools/selftest.js             # 后端端到端：109 项断言（含开机/关机两种目标）
 node tools/server-ctl.js start     # 起服务
-node tools/uicheck.js --flow       # 无头浏览器跑完整流程：47 项断言
+node tools/uicheck.js --flow       # 无头浏览器跑完整流程：58 项断言
 node tools/uicheck.js --anim       # 动效验证：14 项断言（MD3 运动系统）
 node tools/uicheck.js --docshot    # 重新生成 docs/ 下的截图
 node tools/make-icons.js           # 生成应用图标
-node tools/make-portable.js 1.3.0  # 打便携包（含 Node + ffmpeg + APK，解压即用）
+node tools/make-portable.js 1.4.0  # 打便携包（含 Node + ffmpeg + APK，解压即用）
 
 # 安卓端（不需要 Gradle / AGP）
 node tools/build-android.js        # 构建 APK → dist/android/
-node tools/verify-android.js       # APK 静态验证：66 项断言
+node tools/verify-android.js       # APK 静态验证：75 项断言
 node tools/coretest-android.js     # 在 PC 上真跑包解析逻辑：31 项断言
-node tools/creatortest-android.js  # 在 PC 上真跑制作核心（PNG/zip/缩放）：34 项断言
+node tools/creatortest-android.js  # 在 PC 上真跑制作核心（PNG/zip/缩放/区间/取消）：56 项断言
 ```
 
 `selftest.js` 会用 ffmpeg 合成测试素材（横屏、旋转、带 alpha），覆盖：

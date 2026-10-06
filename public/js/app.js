@@ -9,7 +9,7 @@ import {
   describeLine, validate, validationToMessages, api, watchJob, toast,
   matchPreset, groupedPresets, STAGE_LABEL, naming, namingPreview,
 } from './core.js';
-import { DEVICE_PRESETS, SCALE_MODES, FORMAT_MODES, HELP, TUTORIAL, VIDEO_EXT, QUALITY_MODES } from './data.js';
+import { DEVICE_PRESETS, SCALE_MODES, FORMAT_MODES, TARGET_MODES, HELP, TUTORIAL, VIDEO_EXT, QUALITY_MODES } from './data.js';
 
 /* ================================================================== */
 /* 视图切换                                                            */
@@ -628,6 +628,7 @@ let configureRendered = false;
 function renderConfigure() {
   if (!configureRendered) {
     buildPresetSelect();
+    buildTargetModes();
     buildFormatModes();
     buildScaleModes();
     bindConfigureInputs();
@@ -636,6 +637,7 @@ function renderConfigure() {
   syncConfigureInputs();
   renderParts();
   renderTimeline();
+  renderTrimSlider();
   if (!stripTiles.length) buildStrip();
   const info = state.info;
   if (info) {
@@ -655,6 +657,62 @@ function buildPresetSelect() {
     }
     sel.appendChild(og);
   }
+}
+
+function buildTargetModes() {
+  const host = $('#target-modes');
+  if (!host) return;
+  host.innerHTML = '';
+  for (const m of TARGET_MODES) {
+    const btn = el('button', {
+      class: 'opt', type: 'button', 'data-target': m.id,
+      'aria-pressed': (state.config.target || 'boot') === m.id,
+      onclick: () => setTarget(m.id),
+    }, [
+      el('span', { class: 'tick', html: svgIcon(ICON.check) }),
+      el('b', { text: m.name }),
+      el('span', { text: m.hint }),
+      el('span', {
+        class: 'tag ' + (m.tone === 'warn' ? 'warn' : m.tone === 'info' ? 'info' : 'ok'),
+        text: m.detail, style: 'margin-top:6px;align-self:flex-start',
+      }),
+      el('span', {
+        class: 'hint mono', text: m.path,
+        style: 'margin-top:6px;font-size:11px;word-break:break-all',
+      }),
+    ]);
+    host.appendChild(btn);
+  }
+}
+
+/** 切换开机 / 关机：同步默认文件名 */
+function setTarget(target) {
+  const c = state.config;
+  c.target = target;
+  const isShutdown = target === 'shutdown';
+  $$('.opt[data-target]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.target === target)));
+
+  const nameInput = $('#in-outname');
+  if (nameInput) {
+    const cur = nameInput.value.trim();
+    const autos = ['bootanimation.zip', 'shutdownanimation.zip',
+      'bootanimation-magisk.zip', 'shutdownanimation-magisk.zip',
+      'bootanimation-video.zip', 'shutdownanimation-video.zip', ''];
+    if (!cur || autos.includes(cur)) {
+      const base = isShutdown ? 'shutdownanimation' : 'bootanimation';
+      nameInput.value = c.magisk ? `${base}-magisk.zip` : `${base}.zip`;
+      c.outputName = nameInput.value;
+    }
+  }
+  // 关机动画的 Magisk 模块信息也跟着换，避免两个包撞 id
+  const mo = c.magiskOpts || (c.magiskOpts = {});
+  if (!mo.id || /^bootanimforge_(boot|shutdown)animation$/.test(mo.id)) {
+    mo.id = isShutdown ? 'bootanimforge_shutdownanimation' : 'bootanimforge_bootanimation';
+  }
+
+  computeValidation();
+  renderRail();
+  saveState();
 }
 
 function buildFormatModes() {
@@ -687,14 +745,16 @@ function setFormat(fmt) {
   const isVideo = fmt === 'video';
   applyFormatVisibility();
 
-  // 文件名默认值：视频版仍然打成 zip，所以默认名不变，但用户改成别的更好认
+  // 文件名默认值：按「开机/关机」与「格式」共同决定，避免不同产物互相覆盖
   const nameInput = $('#in-outname');
   if (nameInput) {
+    const base = c.target === 'shutdown' ? 'shutdownanimation' : 'bootanimation';
     const cur = nameInput.value.trim();
-    const defaults = ['bootanimation.zip', 'bootanimation-classic.zip', 'bootanimation-video.zip', 'bootanimation-magisk.zip', ''];
-    if (!cur || defaults.includes(cur)) {
-      nameInput.value = isVideo ? 'bootanimation-video.zip'
-        : (state.config.magisk ? 'bootanimation-magisk.zip' : 'bootanimation.zip');
+    const autos = ['', 'bootanimation.zip', 'shutdownanimation.zip',
+      'bootanimation-magisk.zip', 'shutdownanimation-magisk.zip',
+      'bootanimation-video.zip', 'shutdownanimation-video.zip'];
+    if (autos.includes(cur)) {
+      nameInput.value = `${base}${c.magisk ? '-magisk' : (isVideo ? '-video' : '')}.zip`;
       c.outputName = nameInput.value;
     }
   }
@@ -904,6 +964,84 @@ function paintRange(input) {
   input.style.setProperty('--fill', pct + '%');
 }
 
+/* ---------------- 取用区间：滑块 + 输入框双向同步 ---------------- */
+
+let trimDrag = null;
+
+function renderTrimSlider() {
+  const track = $('#trim-track');
+  const fill = $('#trim-fill');
+  const hs = $('#trim-h-start');
+  const he = $('#trim-h-end');
+  if (!track || !fill || !hs || !he) return;
+  const dur = state.info?.duration || 0;
+  const { list } = planParts();
+  const s = list.length ? list[0].start : 0;
+  const e = list.length ? list[list.length - 1].end : dur;
+  const pct = (t) => dur > 0 ? clamp(t / dur, 0, 1) * 100 : 0;
+  const a = pct(s), b = pct(e);
+  fill.style.left = a + '%';
+  fill.style.right = (100 - b) + '%';
+  hs.style.left = a + '%';
+  he.style.left = b + '%';
+  setText($('#trim-mid'), `取用 ${(e - s).toFixed(2)}s`);
+  setText($('#trim-total'), `${dur.toFixed(2)}s`);
+}
+
+function bindTrimSlider() {
+  const track = $('#trim-track');
+  if (!track) return;
+  const timeAt = (clientX) => {
+    const r = track.getBoundingClientRect();
+    const ratio = clamp((clientX - r.left) / r.width, 0, 1);
+    return ratio * (state.info?.duration || 0);
+  };
+  const apply = (clientX) => {
+    if (!trimDrag || !state.info) return;
+    const dur = state.info.duration || 0;
+    const t = clamp(timeAt(clientX), 0, dur);
+    const parts = state.config.parts;
+    if (!parts || !parts.length) return;
+    if (trimDrag === 'start') {
+      const first = parts[0];
+      first.start = Math.min(t, (first.end || t) - 0.05);
+      state.config.start = first.start;
+    } else {
+      const last = parts[parts.length - 1];
+      last.end = Math.max(t, (last.start || 0) + 0.05);
+      state.config.end = last.end;
+    }
+    $('#in-start').value = (parts[0].start ?? 0).toFixed(2);
+    $('#in-end').value = (parts[parts.length - 1].end ?? dur).toFixed(2);
+    renderTrimSlider();
+    renderTimeline();
+    renderParts();
+    computeValidation();
+  };
+
+  const startDrag = (which) => (e) => {
+    if (!state.info) return;
+    trimDrag = which;
+    const h = which === 'start' ? $('#trim-h-start') : $('#trim-h-end');
+    h?.classList.add('drag');
+    track.setPointerCapture?.(e.pointerId);
+    apply(e.clientX);
+  };
+  $('#trim-h-start').addEventListener('pointerdown', startDrag('start'));
+  $('#trim-h-end').addEventListener('pointerdown', startDrag('end'));
+  track.addEventListener('pointermove', (e) => { if (trimDrag) apply(e.clientX); });
+  const endDrag = (e) => {
+    if (!trimDrag) return;
+    $('#trim-h-start')?.classList.remove('drag');
+    $('#trim-h-end')?.classList.remove('drag');
+    trimDrag = null;
+    try { track.releasePointerCapture?.(e.pointerId); } catch { /* ignore */ }
+    saveState();
+  };
+  track.addEventListener('pointerup', endDrag);
+  track.addEventListener('pointercancel', endDrag);
+}
+
 function bindConfigureInputs() {
   const c = state.config;
   const onResize = debounce(() => {
@@ -977,6 +1115,7 @@ function bindConfigureInputs() {
     $('#in-end').value = e.toFixed(2);
     updateTrimHint();
     renderTimeline();
+    renderTrimSlider();
     renderParts();
     onResize();
   };
@@ -1051,11 +1190,13 @@ function bindConfigureInputs() {
     // Magisk 模块与纯动画是两个不同的产物，默认文件名分开，避免互相覆盖
     const nameInput = $('#in-outname');
     if (nameInput) {
+      const base = c.target === 'shutdown' ? 'shutdownanimation' : 'bootanimation';
       const cur = nameInput.value.trim();
-      const autos = ['bootanimation.zip', 'bootanimation-magisk.zip', 'bootanimation-video.zip', 'bootanimation-classic.zip'];
-      if (!cur || autos.includes(cur)) {
-        nameInput.value = c.magisk ? 'bootanimation-magisk.zip'
-          : (c.format === 'video' ? 'bootanimation-video.zip' : 'bootanimation.zip');
+      const autos = ['', 'bootanimation.zip', 'shutdownanimation.zip',
+        'bootanimation-magisk.zip', 'shutdownanimation-magisk.zip',
+        'bootanimation-video.zip', 'shutdownanimation-video.zip'];
+      if (autos.includes(cur)) {
+        nameInput.value = `${base}${c.magisk ? '-magisk' : (c.format === 'video' ? '-video' : '')}.zip`;
         c.outputName = nameInput.value;
       }
     }
@@ -1328,7 +1469,8 @@ function renderRail() {
     ? (list[0].count === 0 ? '1 段 · 无限循环' : `1 段 · ${list[0].count} 次`)
     : `${list.length} 段`);
   setText($('#rail-format'), c.format === 'video' ? '视频版 (12+)' : '传统帧序列');
-  setText($('#rail-output'), c.magisk ? 'Magisk 模块' : 'bootanimation.zip');
+  const tgtMode = TARGET_MODES.find((m) => m.id === (c.target || 'boot')) || TARGET_MODES[0];
+  setText($('#rail-output'), c.magisk ? `${tgtMode.name}模块` : tgtMode.file);
   const est = state.estimate || estimateBytes();
   setText($('#rail-size'), `≈ ${fmtBytes(est.bytes)}`, { pulse: true });
   setText($('#rail-dur'), fmtDur(state.estimate?.duration || estimateDuration()), { pulse: true });
@@ -1511,6 +1653,7 @@ async function runConversion() {
     input: state.input,
     outputDir: c.outputDir || '',
     outputName: c.outputName || 'bootanimation.zip',
+    target: c.target === 'shutdown' ? 'shutdown' : 'boot',
     format: c.format === 'video' ? 'video' : 'classic',
     magisk: !!c.magisk,
     width: Math.round(c.width),
@@ -1677,22 +1820,30 @@ function finishSuccess(r) {
   toast(`已生成 ${r.outputName}（${fmtBytes(r.size)}）`, 'ok');
 }
 
-/** 完成页的刷入指引：按 Magisk / 视频版 / 传统直接替换 分别给步骤 */
+/** 完成页的刷入指引：按 Magisk / 视频版 / 传统直接替换 分别给步骤，并区分开机/关机 */
 function renderInstallGuide(r) {
   const host = $('#install-guide');
   if (!host) return;
+  const isShutdown = r.target === 'shutdown';
+  const tgtLabel = isShutdown ? '关机动画' : '开机动画';
+  const fileName = r.outputName && /\.zip$/.test(r.outputName)
+    ? r.outputName
+    : (isShutdown ? 'shutdownanimation.zip' : 'bootanimation.zip');
+  const relDir = isShutdown ? 'shutdownanimation.zip' : 'bootanimation.zip';
   const steps = [];
   if (r.magisk) {
-    steps.push({ b: '直接刷入模块（推荐）', d: `产出的 <span class="mono">${escapeHtml(r.outputName)}</span> 就是 Magisk 模块：打开 Magisk App → 模块 → 从本地安装 → 选中它 → 重启。因为是挂载，卸载模块即可恢复原来的开机动画。` });
-    steps.push({ b: '原来的动画文件也一起生成了', d: '如果更想手动替换，用它也可以：复制到系统媒体目录、权限设为 rw-r--r--（0644）、重启。' });
+    steps.push({ b: '直接刷入模块（推荐）', d: `产出的 <span class="mono">${escapeHtml(r.outputName)}</span> 就是 Magisk 模块：打开 Magisk App → 模块 → 从本地安装 → 选中它 → 重启。因为是挂载，卸载模块即可恢复原来的${tgtLabel}。` });
+    steps.push({ b: '原来的动画文件也一起生成了', d: `如果更想手动替换，用它也可以：复制到系统媒体目录（目标文件名 <span class="mono">${escapeHtml(relDir)}</span>）、权限设为 rw-r--r--（0644）、重启。` });
   } else {
-    steps.push({ b: '有 Root / 已装 Magisk', d: `把 <span class="mono">${escapeHtml(r.outputName)}</span> 推到 <span class="mono">/system/media/</span> 或 <span class="mono">/product/media/</span>，权限设为 <span class="mono">rw-r--r--</span>（0644），重启。用 Magisk 模块最省事，不用改系统分区。` });
-    steps.push({ b: '第三方 Recovery（TWRP）', d: '把文件放进手机，在 TWRP 的文件管理器里覆盖到 /system/media/；或做成卡刷包在 recovery 里刷入。' });
+    steps.push({ b: '有 Root / 已装 Magisk', d: `把 <span class="mono">${escapeHtml(fileName)}</span> 推到 <span class="mono">/system/media/</span>、<span class="mono">/product/media/</span> 或 <span class="mono">/oem/media/</span>，文件名保持 <span class="mono">${escapeHtml(relDir)}</span>，权限设为 <span class="mono">rw-r--r--</span>（0644），重启。用 Magisk 模块最省事，不用改系统分区。` });
+    steps.push({ b: '第三方 Recovery（TWRP）', d: '把文件放进手机，在 TWRP 的文件管理器里覆盖到对应的系统媒体目录；或做成卡刷包在 recovery 里刷入。' });
   }
-  if (r.format === 'video') {
-    steps.push({ b: '⚠ 视频版只被部分机型识别', d: 'Android 12+ 的机型才可能使用 <span class="mono">bootanimation.mp4</span> 这种格式。若替换后开机没有动画（黑屏但能进系统），说明你的系统仍读传统格式——回到配置页把「输出格式」改成<b>传统帧序列</b>再做一次即可。' });
+  if (isShutdown) {
+    steps.push({ b: '⚠ 关机动画的位置没有统一规范', d: '不同厂商对关机动画的路径与文件名自定义较多（常见是 <span class="mono">/system/media/shutdownanimation.zip</span>）。建议先确认设备上原本有没有这个文件、放在哪，再替换同一路径。部分机型根本不支持自定义关机动画。' });
+  } else {
+    steps.push({ b: '⚠ 视频版只被部分机型识别', d: 'Android 12+ 的机型才可能使用 <span class="mono">bootanimation.mp4</span>。若替换后看不到动画（黑屏但能进系统），说明你的系统仍读传统格式——回到配置页把「输出格式」改成<b>传统帧序列</b>再做一次即可。' });
   }
-  steps.push({ b: '没 Root 怎么办', d: '原生 Android 不允许替换开机动画，这条路走不通。可以留作素材用在别的设备上。' });
+  steps.push({ b: '没 Root 怎么办', d: '原生 Android 不允许替换这类系统动画，这条路走不通。可以留作素材用在别的设备上。' });
 
   host.innerHTML = '';
   steps.forEach((s, i) => {
@@ -2014,6 +2165,7 @@ function bindHelp() {
 
 bindImport();
 bindTimeline();
+bindTrimSlider();
 bindHelp();
 init();
 

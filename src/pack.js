@@ -15,19 +15,18 @@
 const fsp = require('fs/promises');
 const { createZipWriter } = require('./zip');
 const { safeName } = require('./util');
+const { getTarget } = require('./targets');
 
-/** 常见 bootanimation 文件在系统里的路径（按出现频率排序） */
-const SYSTEM_PATHS = [
-  { dir: 'system/media', label: '/system/media', note: '最常见' },
-  { dir: 'system/product/media', label: '/product/media', note: 'Android 10+ 常见' },
-  { dir: 'system/oem/media', label: '/oem/media', note: '部分厂商' },
-];
+/** 常见动画文件在系统里的路径（开机/关机共用同一批目录） */
+const SYSTEM_PATHS = getTarget('boot').paths;
 
 /**
  * @param {object} o
  *   o.outFile    输出 zip 路径
  *   o.files      [{ name, buffer }] 要放进每个目标目录的载荷文件
- *                （传统格式：bootanimation.zip；视频格式：bootanimation.mp4 [+ audio.mp3]）
+ *                （传统格式：bootanimation.zip / shutdownanimation.zip；
+ *                  视频格式：bootanimation.mp4 / shutdownanimation.mp4 [+ audio.mp3]）
+ *   o.target     'boot' | 'shutdown'，只影响默认的模块名与描述文案
  *   o.id,name,version,versionCode,author,description
  *   o.pathKey    写入哪个系统路径（SYSTEM_PATHS[].dir），默认 system/media
  *   o.allPaths   是否在多个路径都放一份（更保险，体积翻倍）
@@ -38,15 +37,16 @@ async function buildMagiskModule(o) {
   const files = (o.files || []).filter((f) => f && f.buffer && f.name);
   if (!files.length) throw new Error('Magisk 模块没有任何载荷文件');
 
+  const tgt = getTarget(o.target);
   const zip = createZipWriter({ file: o.outFile, compress: true });
 
-  const id = safeName(o.id || 'bootanimforge_bootanimation', 'bootanimforge_bootanimation')
+  const id = safeName(o.id || tgt.magiskId, tgt.magiskId)
     .replace(/[^A-Za-z0-9._-]/g, '_');
   const version = String(o.version || '1.0.0');
   const versionCode = Number(o.versionCode) || Math.round(parseFloat(String(version).replace(/[^\d.]/g, '')) * 100) || 1;
-  const name = String(o.name || '开机动画').slice(0, 60);
-  const author = String(o.author || 'BootAnimForge').slice(0, 40);
-  const description = String(o.description || '由启幕生成的 Magisk 开机动画模块').slice(0, 200);
+  const name = String(o.name || tgt.label).slice(0, 60);
+  const author = String(o.author || '启幕').slice(0, 40);
+  const description = String(o.description || `由启幕生成的 Magisk ${tgt.label}模块`).slice(0, 200);
   const kindText = o.kind === 'video' ? '视频版（Android 12+）' : '传统帧序列版';
 
   const targets = o.allPaths ? SYSTEM_PATHS.map((p) => p.dir) : [o.pathKey || 'system/media'];
@@ -105,7 +105,7 @@ ${targets.map((t) => `  /${t.replace(/^system\//, '')}/${fileNames.join('、')}`
 
 因为是挂载，不修改真实系统分区，所以：
 
-  · 卸载模块即可恢复系统原来的开机动画
+  · 卸载模块即可恢复系统原来的动画
   · 不受 OTA 影响
   · 不需要手动改权限
 
@@ -113,14 +113,14 @@ ${targets.map((t) => `  /${t.replace(/^system\//, '')}/${fileNames.join('、')}`
 ------
 1. 打开 Magisk App → 模块 → 从本地安装
 2. 选择这个 zip，安装完成后重启
-3. 若开机看不到动画，进 Magisk 卸载本模块再重启即可恢复
+3. 若看不到动画，进 Magisk 卸载本模块再重启即可恢复
 
 注意事项
 --------
-· 开机动画文件本身若有问题，可能导致开机阶段黑屏（系统仍会正常启动）
+· 动画文件本身若有问题，可能导致该阶段黑屏（系统仍会正常启动）
 · 不同厂商系统读取的路径不同，本模块已按常见路径布置
-· 建议先确认设备原本的 bootanimation 文件位置
-${o.kind === 'video' ? '· 视频版格式只被 Android 12+ 的部分机型识别；若设备仍在用传统格式，请改用传统帧序列版\n' : ''}`;
+· 建议先确认设备原本的 ${tgt.zipName.replace('.zip', '')} 文件位置
+· 这是**${tgt.label}**模块（${tgt.zipName}）${o.kind === 'video' ? '\n· 视频版格式只被 Android 12+ 的部分机型识别；若设备仍在用传统格式，请改用传统帧序列版' : ''}`;
     zip.add('README.txt', readme);
   }
 

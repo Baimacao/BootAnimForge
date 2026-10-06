@@ -39,18 +39,24 @@ function normClock(v) {
 function normalizePart(p, index) {
   const start = Math.max(0, num(p.start, 0));
   const end = Math.max(start + 0.001, num(p.end, start + 1));
-  const type = TYPE_CHARS.has(String(p.type || 'p').trim().toLowerCase())
-    ? String(p.type || 'p').trim().toLowerCase() : 'p';
+  // 关键：用户**没写** type 时不要把默认值 'p' 写进结果。
+  // 否则下游（buildDesc）无法区分「用户明确要 p」和「没指定」，
+  // 关机动画需要的 c 就永远覆盖不上（踩过：desc 一直是 p）。
+  // 未指定时保持 undefined，由消费者按 cfg.partType 或 'p' 兜底。
+  const rawType = p.type === undefined || p.type === null ? '' : String(p.type).trim().toLowerCase();
+  const type = TYPE_CHARS.has(rawType) ? rawType : undefined;
   const dir = String(p.dir || `part${index}`).trim() || `part${index}`;
+  const effType = type || 'p';
   return {
     dir,
     name: String(p.name || `第 ${index + 1} 段`).slice(0, 60),
     start,
     end,
     type,
+    typeProvided: type !== undefined,
     count: clamp(int(p.count, 0), 0, 100000),
     pause: clamp(int(p.pause, 0), 0, 100000),
-    fade: type === 'f' ? clamp(int(p.fade, 0), 0, 100000) : 0,
+    fade: effType === 'f' ? clamp(int(p.fade, 0), 0, 100000) : 0,
     background: hexColor(p.background, ''),
     clock: normClock(p.clock),
     audio: !!p.audio,
@@ -110,7 +116,8 @@ function frameNumberOf(fileName) {
 /**
  * 生成 desc.txt 文本（CRLF：Android 解析器对行尾不敏感，但 CRLF 最保险）
  * @param {object} cfg  {width,height,fps,progress,parts:[...]}
- */function buildDesc(cfg) {
+ */
+function buildDesc(cfg) {
   const width = Math.max(1, int(cfg.width, 1080));
   const height = Math.max(1, int(cfg.height, 1920));
   const fps = clamp(int(cfg.fps, 30), 1, 240);
@@ -118,10 +125,17 @@ function frameNumberOf(fileName) {
   if (cfg.progress) header.push(1);
 
   const lines = [header.join(' ')];
-  const parts = (cfg.parts || []).map(normalizePart);
-  for (const p of parts) {
-    const fields = [p.type, p.count, p.pause, p.dir];
-    if (p.type === 'f') fields.push(p.fade);
+  const rawParts = cfg.parts || [];
+  const parts = rawParts.map(normalizePart);
+  const cfgType = TYPE_CHARS.has(String(cfg.partType || '').toLowerCase())
+    ? String(cfg.partType).toLowerCase() : null;
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    // 关机动画建议用 c（必须播完）：系统关掉前要保证整段放完。
+    // normalizePart 只在用户显式写过 type 时才给 p.type，所以这里能可靠区分。
+    const type = p.type || cfgType || 'p';
+    const fields = [type, p.count, p.pause, p.dir];
+    if (type === 'f') fields.push(p.fade);
     if (p.background) fields.push(p.background);
     if (p.clock) fields.push(p.clock);
     lines.push(fields.join(' '));

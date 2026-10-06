@@ -47,6 +47,8 @@ public final class BootCore {
         public int kind = KIND_UNKNOWN;
         public boolean valid;
         public boolean moovFirst;
+        /** 视频版时，实际匹配到的 mp4 文件名（bootanimation.mp4 或 shutdownanimation.mp4） */
+        public String videoName;
         public int width, height, fps;
         public boolean hasProgress;
         public int totalFrames;
@@ -90,22 +92,28 @@ public final class BootCore {
             }
 
             boolean hasDesc = entries.containsKey("desc.txt");
-            boolean hasMp4 = entries.containsKey("bootanimation.mp4");
+            // 视频版：Android 12+ 用 bootanimation.mp4 / shutdownanimation.mp4。
+            // 不写死文件名：根目录下任意 .mp4 都按视频版处理，开机与关机两种命名都能识别。
+            String videoEntry = null;
+            for (String n : entries.keySet()) {
+                String lower = n.toLowerCase(Locale.US);
+                if (lower.endsWith(".mp4") && lower.indexOf('/') < 0) { videoEntry = n; break; }
+            }
             boolean hasMp3 = entries.containsKey("audio.mp3");
 
-            if (hasMp4) {
+            if (videoEntry != null && !hasDesc) {
                 r.kind = KIND_VIDEO;
-                ZipEntry e = entries.get("bootanimation.mp4");
+                r.videoName = videoEntry;
+                ZipEntry e = entries.get(videoEntry);
                 long size = e.getSize();
-                if (size <= 0) r.warnings.add("bootanimation.mp4 大小未知");
-                else if (size > 60L * 1024 * 1024) r.warnings.add("视频体积偏大（" + mb(size) + "），开机解码可能吃力");
+                if (size <= 0) r.warnings.add(videoEntry + " 大小未知");
+                else if (size > 60L * 1024 * 1024) r.warnings.add("视频体积偏大（" + mb(size) + "），解码可能吃力");
                 if (hasMp3) r.notes.add("包含独立音轨 audio.mp3");
                 try {
                     r.moovFirst = moovIsFirst(zf, e);
-                    if (!r.moovFirst) r.warnings.add("moov 不在文件头：开机需要读完整个视频才能出画面，建议用「启幕」PC 版重新导出");
+                    if (!r.moovFirst) r.warnings.add("moov 不在文件头：系统需要读完整个视频才能出画面，建议用「启幕」PC 版重新导出");
                     else r.notes.add("moov 在文件头（起播快）");
                 } catch (Throwable ignored) { }
-                if (hasDesc) r.notes.add("同时含 desc.txt —— 新旧混合包，系统读哪个取决于机型");
                 r.valid = true;
             } else if (hasDesc) {
                 r.kind = KIND_CLASSIC;

@@ -123,13 +123,25 @@ final class AndroidFrameSource implements Creator.FrameSource {
 
             Bitmap target = ensureReuse(w, h);
             Canvas c = new Canvas(target);
-            c.drawBitmap(bmp, 0, 0, new Paint(Paint.FILTER_BITMAP_FLAG));
+            // 源 Bitmap 若已含旋转（尺寸已等于解码尺寸），直接画；
+            // 否则在画布上做一次旋转，保证输出方向与用户看到的一致。
+            if (alreadyRotated || rotation == 0) {
+                c.drawBitmap(bmp, 0, 0, new Paint(Paint.FILTER_BITMAP_FLAG));
+            } else {
+                c.save();
+                c.translate(w / 2f, h / 2f);
+                c.rotate(rotation);
+                float k = (rotation == 90 || rotation == 270)
+                        ? Math.min((float) w / bmp.getHeight(), (float) h / bmp.getWidth())
+                        : Math.min((float) w / bmp.getWidth(), (float) h / bmp.getHeight());
+                c.scale(k, k);
+                c.drawBitmap(bmp, -bmp.getWidth() / 2f, -bmp.getHeight() / 2f, new Paint(Paint.FILTER_BITMAP_FLAG));
+                c.restore();
+            }
 
             int[] px = new int[target.getWidth() * target.getHeight()];
             target.getPixels(px, 0, target.getWidth(), 0, 0, target.getWidth(), target.getHeight());
-
-            if (alreadyRotated || rotation == 0) return px;
-            return rotate(px, target.getWidth(), target.getHeight(), rotation);
+            return px;
         } finally {
             if (bmp != reuse) bmp.recycle();
         }

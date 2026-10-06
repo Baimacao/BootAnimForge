@@ -1,6 +1,6 @@
 {
   "name": "bootanimforge",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "启幕（BootAnimForge）：把视频做成安卓开机动画。Windows 端负责生成（MD3 界面、零依赖 Node 引擎、Magisk 模块一键生成）；安卓端负责制作与刷入（直接读视频出 zip、Root 安装、自动备份还原、圆屏适配）",
   "main": "src/main.js",

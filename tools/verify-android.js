@@ -121,6 +121,8 @@ function dexContains(buf, s) {
     'Lcom/baimacao/bootanimforge/ZipStoreWriter;',
     'Lcom/baimacao/bootanimforge/AndroidFrameSource;',
     'Lcom/baimacao/bootanimforge/VideoProbe;',
+    'Lcom/baimacao/bootanimforge/AnimTarget;',
+    'Lcom/baimacao/bootanimforge/FramePreview;',
   ];
   for (const c of classNames) ok('包含类 ' + c.replace(/^L|;$/g, '').split('/').pop(), dexContains(dex, c));
 
@@ -152,6 +154,14 @@ function dexContains(buf, s) {
     ['留边不拉伸', '不拉伸说明'],
     ['正在制作', '进度状态'],
     ['制作完成', '完成提示'],
+    // 关机动画 / 取用区间 / 取消 / 预览（新增）
+    ['shutdownanimation.zip', '关机动画文件名'],
+    ['关机动画', '关机动画入口'],
+    ['取用区间', '区间选择'],
+    ['取消当前任务', '任务取消'],
+    ['预览当前动画', '预览入口'],
+    ['预览效果', '制作前预览'],
+    ['已取消', '取消提示'],
   ];
   for (const [s, what] of must) ok(`含「${s}」（${what}）`, dexContains(dex, s));
 

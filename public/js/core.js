@@ -110,6 +110,7 @@ const LS_KEY = 'bootanimforge.v1';
 
 export function defaultConfig() {
   return {
+    target: 'boot',      // boot = 开机动画；shutdown = 关机动画
     format: 'classic',   // classic = 传统帧序列；video = Android 12+ 视频版
     width: 1080,
     height: 1920,
@@ -206,13 +207,15 @@ export function ensureParts(info) {
   if (!Array.isArray(c.parts) || c.parts.length === 0) {
     c.parts = [{
       dir: 'part0', name: '主循环', start: Number(c.start) || 0, end: total,
-      type: 'p', count: 0, pause: 0, fade: 0, background: '', clock: '', audio: false,
+      count: 0, pause: 0, fade: 0, background: '', clock: '', audio: false,
     }];
   }
   c.parts.forEach((p, i) => {
     if (!p.dir) p.dir = `part${i}`;
     if (!p.name) p.name = `第 ${i + 1} 段`;
-    if (p.type === undefined) p.type = 'p';
+    // 这里**不能**补一个默认 type='p'：一旦写死，就无法区分
+    // 「用户明确要 p」和「没指定」，关机动画需要的 c 会被它盖掉。
+    // 默认值只在 buildDescPreview / 后端按 target 取。
     if (p.count === undefined) p.count = 0;
     if (p.pause === undefined) p.pause = 0;
     if (p.fade === undefined) p.fade = 0;
@@ -235,9 +238,13 @@ export function planParts() {
     // 不调用 ensureParts（那需要 info），这里只保证「至少一段」这一不变量
     if (state.info) ensureParts(state.info);
     else {
+      // 注意：**不要**给 type 一个默认值 'p'。
+      // 否则 buildDescPreview 无法区分「用户明确要 p」和「没指定」，
+      // 关机动画需要的 c 就永远覆盖不上（PC 端与安卓端都踩过这个坑）。
+      // type 留空，由 target 决定，默认由后端/预览兜底为 'p'。
       c.parts = [{
         dir: 'part0', name: '主循环', start: 0, end: Math.max(0.1, Number(c.end) || 1),
-        type: 'p', count: 0, pause: 0, fade: 0, background: '', clock: '', audio: false,
+        count: 0, pause: 0, fade: 0, background: '', clock: '', audio: false,
       }];
     }
   }
@@ -245,7 +252,8 @@ export function planParts() {
     const start = Math.max(0, Number(p.start) || 0);
     const end = Math.max(start + 0.001, Number(p.end) || start + 1);
     const frames = frameCount(start, end, fps);
-    return { ...p, index: i, dir: p.dir || `part${i}`, start, end, frames };
+    // rawType 保留"用户是否显式指定过类型"这个信息（见 buildDescPreview）
+    return { ...p, rawType: p.type, index: i, dir: p.dir || `part${i}`, start, end, frames };
   });
   const frames = list.reduce((a, p) => a + p.frames, 0);
   return { fps, list, frames, naming: naming() };
@@ -314,9 +322,13 @@ export function buildDescPreview() {
   const head = [Math.round(c.width), Math.round(c.height), fps];
   if (c.progress) head.push(1);
   const lines = [head.join(' ')];
+  // 关机动画默认用 c（必须播完）—— 与后端 targets.js 的 partType 一致
+  const targetType = c.target === 'shutdown' ? 'c' : 'p';
   for (const p of list) {
-    const f = [p.type || 'p', Number(p.count) || 0, Number(p.pause) || 0, p.dir];
-    if ((p.type || 'p') === 'f') f.push(Number(p.fade) || 0);
+    const explicit = p.rawType !== undefined && p.rawType !== null && String(p.rawType).trim() !== '';
+    const type = explicit ? (p.type || 'p') : targetType;
+    const f = [type, Number(p.count) || 0, Number(p.pause) || 0, p.dir];
+    if (type === 'f') f.push(Number(p.fade) || 0);
     if (p.background) f.push(p.background);
     if (p.clock) f.push(p.clock);
     lines.push(f.join(' '));

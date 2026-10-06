@@ -87,8 +87,16 @@ public class MainActivity extends Activity {
     private List<BootScanner.Found> found = new ArrayList<BootScanner.Found>();
     private BootScanner.Found active;
     private String targetPath;
+    private int animTarget = AnimTarget.BOOT;      // 当前操作的是开机还是关机动画
+    private LinearLayout targetRow;
+    private Button previewBtn;
     private File staged;                        // 已复制到应用目录、待安装的包
     private BootCore.Report stagedReport;
+
+    /** 目标切换后，旧路径可能不属于当前目标（文件名不同），需要重选 */
+    private boolean sameTarget(String path) {
+        return AnimTarget.detectFromPath(path) == animTarget;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -165,6 +173,32 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams subLp = lp(-1, -2);
         subLp.bottomMargin = dp(16);
         content.addView(sub, subLp);
+
+        // ---- 目标切换：开机 / 关机 ----
+        LinearLayout modeCard = card();
+        modeCard.addView(sectionHead("操作对象"));
+        modeCard.addView(text("开机与关机动画是两个独立的文件，可以分别替换。先选要处理哪一个。",
+                12, C_ON_SURF_VAR, false));
+        targetRow = new LinearLayout(this);
+        targetRow.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams trLp = lp(-1, -2);
+        trLp.topMargin = dp(10);
+        modeCard.addView(targetRow, trLp);
+        content.addView(modeCard);
+
+        // ---- 预览当前动画 ----
+        LinearLayout previewCard = card();
+        previewCard.addView(sectionHead("预览当前动画"));
+        previewCard.addView(text("在刷入之前先看一眼设备上现在用的是什么动画 —— 不用重启就能确认。",
+                12, C_ON_SURF_VAR, false));
+        previewBtn = tonalButton("预览当前动画");
+        previewBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { previewCurrent(); }
+        });
+        LinearLayout.LayoutParams pvLp = lp(-1, dp(44));
+        pvLp.topMargin = dp(10);
+        previewCard.addView(previewBtn, pvLp);
+        content.addView(previewCard);
 
         // ---- 制作入口 ----
         LinearLayout makeCard = card();
@@ -292,6 +326,151 @@ public class MainActivity extends Activity {
 
         setContentView(root);
         applyShape();
+        rebuildTargetRow();
+    }
+
+    /** 开机 / 关机 切换 */
+    private void rebuildTargetRow() {
+        if (targetRow == null) return;
+        targetRow.removeAllViews();
+        int[] targets = { AnimTarget.BOOT, AnimTarget.SHUTDOWN };
+        for (int i = 0; i < targets.length; i++) {
+            final int t = targets[i];
+            boolean sel = animTarget == t;
+            Button b = styledButton((sel ? "● " : "○ ") + AnimTarget.label(t)
+                            + "　" + AnimTarget.fileName(t),
+                    sel ? C_PRIMARY_CONT : C_SURF_HIGH,
+                    sel ? C_ON_PRIMARY_CONT : C_ON_SURFACE);
+            b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            b.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (animTarget == t) return;
+                    animTarget = t;
+                    targetPath = null;              // 路径要按新目标重选
+                    active = null;
+                    rebuildTargetRow();
+                    refreshAll();
+                }
+            });
+            LinearLayout.LayoutParams bl = lp(-1, dp(44));
+            bl.bottomMargin = dp(6);
+            targetRow.addView(b, bl);
+        }
+    }
+
+    /**
+     * 预览当前动画：从已安装的 zip 里取几帧出来看。
+     * 直接用 root 把系统文件复制到应用目录再解包 —— 避免为了看一帧就整包读进内存。
+     */
+    private void previewCurrent() {
+        final String path = targetPath != null ? targetPath : (active != null ? active.path : null);
+        if (path == null) { toast("还没有确定要预览的文件路径"); return; }
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("预览 " + AnimTarget.label(animTarget))
+                .setMessage("正在读取…")
+                .setPositiveButton("好", null)
+                .create();
+        dialog.show();
+
+        new Thread(new Runnable() {
+            public void run() {
+                File tmp = new File(getExternalFilesDir(null) != null ? getExternalFilesDir(null) : getFilesDir(),
+                        "preview/current.zip");
+                final FramePreview.Result res;
+                String err = null;
+                try {
+                    // 清掉上次的
+                    File dir = tmp.getParentFile();
+                    if (dir != null && dir.exists()) {
+                        File[] old = dir.listFiles();
+                        if (old != null) for (File f : old) f.delete();
+                    }
+                    if (dir != null) dir.mkdirs();
+
+                    RootShell.FileInfo fi = RootShell.statFile(path);
+                    if (!fi.exists) {
+                        err = "文件不存在：" + path;
+                        res = null;
+                    } else {
+                        RootShell.Result cp = RootShell.pullTo(path, tmp.getAbsolutePath());
+                        if (!cp.ok() || !tmp.exists() || tmp.length() == 0) {
+                            err = "复制失败：" + cp.text();
+                            res = null;
+                        } else {
+                            res = FramePreview.load(tmp, 6);
+                        }
+                    }
+                } catch (Throwable t) {
+                    err = t.getMessage();
+                    final String cerr = err;
+                    ui.post(new Runnable() {
+                        public void run() {
+                            dialog.dismiss();
+                            new AlertDialog.Builder(MainActivity.this)
+                                    .setTitle("预览失败").setMessage(cerr)
+                                    .setPositiveButton("知道了", null).show();
+                        }
+                    });
+                    return;
+                }
+
+                final FramePreview.Result fres = res;
+                final String ferr = err;
+                ui.post(new Runnable() {
+                    public void run() {
+                        dialog.dismiss();
+                        if (ferr != null) {
+                            new AlertDialog.Builder(MainActivity.this)
+                                    .setTitle("预览失败").setMessage(ferr)
+                                    .setPositiveButton("知道了", null).show();
+                            return;
+                        }
+                        showPreviewResult(fres);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private void showPreviewResult(FramePreview.Result res) {
+        if (res == null) return;
+        StringBuilder head = new StringBuilder();
+        head.append("位置：").append(targetPath).append('\n');
+        if (res.info != null && res.info.length() > 0) head.append(res.info).append('\n');
+        if (res.error != null) head.append("\n").append(res.error);
+        if (res.frames.isEmpty()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("预览")
+                    .setMessage(head.toString())
+                    .setPositiveButton("关闭", null).show();
+            return;
+        }
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(12), dp(12), dp(12), dp(12));
+        TextView info = text(head.toString(), 12, C_ON_SURF_VAR, false);
+        box.addView(info);
+        for (int i = 0; i < res.frames.size(); i++) {
+            FramePreview.Frame f = res.frames.get(i);
+            TextView label = text(f.label, 11, C_ON_SURF_VAR, false);
+            LinearLayout.LayoutParams ll = lp(-1, -2);
+            ll.topMargin = dp(8);
+            box.addView(label, ll);
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setImageBitmap(f.bitmap);
+            iv.setAdjustViewBounds(true);
+            iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            box.addView(iv, lp(-1, dp(170)));
+        }
+        ScrollView sv = new ScrollView(this);
+        sv.addView(box);
+        new AlertDialog.Builder(this)
+                .setTitle("预览 · " + AnimTarget.label(animTarget))
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .show();
     }
 
     /** 圆屏安全区：每次形状设置变化后重新套用 */
@@ -315,7 +494,7 @@ public class MainActivity extends Activity {
         for (BootScanner.Found f : found) {
             if (f.exists) show.add(f);
         }
-        for (String must : BootScanner.CANDIDATES) {
+        for (String must : AnimTarget.candidates(animTarget)) {
             if (show.size() >= 4) break;
             boolean already = false;
             for (BootScanner.Found s : show) if (s.path.equals(must)) already = true;
@@ -349,14 +528,15 @@ public class MainActivity extends Activity {
             public void run() {
                 RootShell.resetCache();
                 final boolean isRooted = RootShell.available();
-                final List<BootScanner.Found> list = BootScanner.scan(isRooted);
+                final List<BootScanner.Found> list = BootScanner.scan(isRooted, animTarget);
                 ui.post(new Runnable() {
                     public void run() {
                         rooted = isRooted;
                         found = list;
                         active = BootScanner.pickActive(list);
-                        if (targetPath == null) {
-                            targetPath = active != null ? active.path : BootScanner.CANDIDATES[0];
+                        if (targetPath == null || !sameTarget(targetPath)) {
+                            targetPath = active != null ? active.path
+                                    : AnimTarget.candidates(animTarget)[0];
                         }
                         updateStatus();
                         rebuildPathRows();

@@ -90,11 +90,17 @@ public class CreatorActivity extends Activity {
     private int padWidth = 3;
     private int startNumber = 1;
     private boolean installAfter = true;
+    private int animTarget = Creator.TARGET_BOOT;   // 开机 / 关机
+    private double trimStart = 0;         // 取用区间（秒）
+    private double trimEnd = 0;           // 0 = 到视频结尾
 
     private VideoProbe probe;
     private File stagedVideo;
     private volatile boolean cancelled;
     private volatile boolean running;
+    private TextView trimInfo;
+    private LinearLayout targetRow;
+    private Button cancelBtn;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,21 +128,49 @@ public class CreatorActivity extends Activity {
         scroll.addView(content, new FrameLayout.LayoutParams(-1, -2));
         root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
 
-        content.addView(head("制作开机动画"));
-        content.addView(sub("选一段视频，在手机上直接生成 bootanimation.zip。留边不拉伸，产物符合规范。"));
+        content.addView(head("制作动画"));
+        content.addView(sub("选一段视频，在手机上直接生成开机 / 关机动画包。留边不拉伸，产物符合规范。"));
 
-        // ---- 1. 选视频 ----
+        // ---- 0. 用途：开机 / 关机 ----
+        LinearLayout c0 = card();
+        c0.addView(sectionHead("0 · 做什么"));
+        c0.addView(sub("开机与关机动画格式相同，只是落位文件名不同（bootanimation.zip / shutdownanimation.zip）。"
+                + "关机动画用「必须播完」类型，避免还没播完系统就关了。"));
+        targetRow = new LinearLayout(this);
+        targetRow.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams tr = lp(-1, -2);
+        tr.topMargin = dp(10);
+        c0.addView(targetRow, tr);
+        content.addView(c0);
+
+        // ---- 1. 选视频 + 取用区间 ----
         LinearLayout c1 = card();
-        c1.addView(sectionHead("1 · 选择视频"));
+        c1.addView(sectionHead("1 · 选择视频与取用区间"));
+        c1.addView(sub("「取用区间」用来截取片头片尾。不改就是整段使用 —— 但手机生成较慢，建议截短。"));
         Button pick = primary("选择视频文件");
         pick.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { pickVideo(); }
         });
-        c1.addView(pick);
+        LinearLayout.LayoutParams pk = lp(-1, dp(48));
+        pk.topMargin = dp(10);
+        c1.addView(pick, pk);
         videoInfo = sub("还没有选择视频");
         LinearLayout.LayoutParams vi = lp(-1, -2);
         vi.topMargin = dp(10);
         c1.addView(videoInfo, vi);
+
+        trimInfo = sub("");
+        LinearLayout.LayoutParams ti = lp(-1, -2);
+        ti.topMargin = dp(8);
+        c1.addView(trimInfo, ti);
+
+        Button trimBtn = tonal("设置取用区间");
+        trimBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { askTrim(); }
+        });
+        LinearLayout.LayoutParams tb = lp(-1, dp(42));
+        tb.topMargin = dp(8);
+        c1.addView(trimBtn, tb);
         content.addView(c1);
 
         // ---- 2. 目标分辨率 ----
@@ -209,6 +243,14 @@ public class CreatorActivity extends Activity {
         sb.topMargin = dp(10);
         c5.addView(startBtn, sb);
 
+        Button previewBtn = tonal("预览效果（按当前参数取帧）");
+        previewBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { previewByParams(); }
+        });
+        LinearLayout.LayoutParams pb2 = lp(-1, dp(42));
+        pb2.topMargin = dp(8);
+        c5.addView(previewBtn, pb2);
+
         progressBox = new LinearLayout(this);
         progressBox.setOrientation(LinearLayout.VERTICAL);
         progressBox.setVisibility(View.GONE);
@@ -219,6 +261,19 @@ public class CreatorActivity extends Activity {
         LinearLayout.LayoutParams pt = lp(-1, -2);
         pt.topMargin = dp(8);
         progressBox.addView(progressText, pt);
+
+        cancelBtn = tonal("取消当前任务");
+        cancelBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                cancelled = true;
+                cancelBtn.setEnabled(false);
+                cancelBtn.setText("正在取消…");
+                progressText.setText("正在取消…");
+            }
+        });
+        LinearLayout.LayoutParams cbl = lp(-1, dp(42));
+        cbl.topMargin = dp(10);
+        progressBox.addView(cancelBtn, cbl);
         LinearLayout.LayoutParams pb = lp(-1, -2);
         pb.topMargin = dp(12);
         c5.addView(progressBox, pb);
@@ -228,11 +283,104 @@ public class CreatorActivity extends Activity {
 
         setContentView(root);
         ScreenShape.applySafeArea(this, content, dp(16), dp(20), dp(28));
+        rebuildTargetRow();
         rebuildPresetRow();
         rebuildNamingRow();
+        updateTrimInfo();
     }
 
     private LinearLayout fpsRow;
+
+    /** 开机 / 关机 选择 */
+    private void rebuildTargetRow() {
+        if (targetRow == null) return;
+        targetRow.removeAllViews();
+        int[] targets = { Creator.TARGET_BOOT, Creator.TARGET_SHUTDOWN };
+        for (int i = 0; i < targets.length; i++) {
+            final int t = targets[i];
+            String label = (t == Creator.TARGET_BOOT ? "开机动画" : "关机动画")
+                    + "  ·  " + Creator.targetFileName(t);
+            Button b = chip(label, animTarget == t);
+            b.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    animTarget = t;
+                    rebuildTargetRow();
+                }
+            });
+            LinearLayout.LayoutParams bl = lp(-1, dp(44));
+            bl.bottomMargin = dp(6);
+            targetRow.addView(b, bl);
+        }
+    }
+
+    /** 取用区间的说明与预估帧数 */
+    private void updateTrimInfo() {
+        if (trimInfo == null) return;
+        if (probe == null) { trimInfo.setText(""); return; }
+        double total = probe.durationSec;
+        double s = Math.max(0, trimStart);
+        double e = trimEnd > 0 ? Math.min(trimEnd, total) : total;
+        if (e <= s) e = Math.min(total, s + 0.1);
+        int frames = (int) Math.max(1, Math.round((e - s) * fps));
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format(Locale.US, "取用 %.2fs → %.2fs（共 %.2fs / 全长 %.2fs）", s, e, e - s, total));
+        sb.append("\n预计生成 ").append(frames).append(" 帧");
+        if (frames > 900) sb.append("　⚠ 偏多，手机上会很慢");
+        trimInfo.setText(sb.toString());
+        trimInfo.setTextColor(frames > 900 ? C_WARN : C_ON_SURF_VAR);
+    }
+
+    /** 设置取用区间 */
+    private void askTrim() {
+        if (probe == null) { toast("请先选择视频"); return; }
+        double total = probe.durationSec;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(8), dp(20), 0);
+        final EditText es = new EditText(this);
+        es.setHint("起点（秒）");
+        es.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        es.setText(String.format(Locale.US, "%.2f", trimStart));
+        final EditText ee = new EditText(this);
+        ee.setHint("终点（秒，留空 = 到结尾）");
+        ee.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        ee.setText(trimEnd > 0 ? String.format(Locale.US, "%.2f", trimEnd) : "");
+        box.addView(sub(String.format(Locale.US, "视频全长 %.2f 秒", total)));
+        box.addView(es);
+        box.addView(ee);
+        new AlertDialog.Builder(this)
+                .setTitle("取用区间")
+                .setView(box)
+                .setNeutralButton("整段", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        trimStart = 0;
+                        trimEnd = 0;
+                        updateTrimInfo();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .setPositiveButton("确定", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        try {
+                            String ss = es.getText().toString().trim();
+                            String se = ee.getText().toString().trim();
+                            double s = ss.length() == 0 ? 0 : Double.parseDouble(ss);
+                            double e = se.length() == 0 ? 0 : Double.parseDouble(se);
+                            if (s < 0) s = 0;
+                            if (s > total) s = Math.max(0, total - 0.1);
+                            if (e > 0) {
+                                if (e > total) e = total;
+                                if (e <= s) { toast("终点要大于起点"); return; }
+                            }
+                            trimStart = s;
+                            trimEnd = e;
+                            updateTrimInfo();
+                        } catch (Throwable t) {
+                            toast("请输入数字（秒），例如 1.5");
+                        }
+                    }
+                }).show();
+    }
 
     private void rebuildFpsRow() {
         if (fpsRow == null) return;
@@ -242,7 +390,7 @@ public class CreatorActivity extends Activity {
             final int f = fpsOpts[i];
             Button b = chip(String.valueOf(f), fps == f);
             b.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) { fps = f; rebuildFpsRow(); }
+                public void onClick(View v) { fps = f; rebuildFpsRow(); updateTrimInfo(); }
             });
             LinearLayout.LayoutParams bl = lp(0, dp(42));
             bl.weight = 1f;
@@ -437,6 +585,8 @@ public class CreatorActivity extends Activity {
                         if (!p.ok) { videoInfo.setText(p.error); toast("无法解析这个视频"); return; }
                         probe = p;
                         stagedVideo = out;
+                        trimStart = 0;
+                        trimEnd = 0;               // 默认整段；用户可以再截
                         videoInfo.setText("已选择：" + p.summary() + "\n文件大小 " + BootCore.mb(out.length()));
                         videoInfo.setTextColor(C_ON_SURFACE);
                         // 默认帧率贴近源（不超过 24，手机生成别太慢）
@@ -445,6 +595,7 @@ public class CreatorActivity extends Activity {
                             if (fps > 24) fps = 24;
                             rebuildFpsRow();
                         }
+                        updateTrimInfo();
                     }
                 });
             }
@@ -455,19 +606,108 @@ public class CreatorActivity extends Activity {
     /* 生成                                                               */
     /* ================================================================== */
 
+    /**
+     * 预览：按当前参数（分辨率/取用区间）在内存里渲染 2 帧显示出来，
+     * 不写任何文件 —— 用户可以在"开始制作"之前先确认留边比例对不对。
+     */
+    private void previewByParams() {
+        if (probe == null || stagedVideo == null) { toast("请先选择视频"); return; }
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("预览（按当前参数）")
+                .setMessage("正在取帧…")
+                .setPositiveButton("好", null)
+                .create();
+        dialog.show();
+
+        final double total = probe.durationSec;
+        final double s = Math.max(0, trimStart);
+        final double e = trimEnd > 0 ? Math.min(trimEnd, total) : total;
+        final int tw = targetW, th = targetH;
+
+        new Thread(new Runnable() {
+            public void run() {
+                AndroidFrameSource src = null;
+                final java.util.List<android.graphics.Bitmap> shots = new java.util.ArrayList<android.graphics.Bitmap>();
+                String err = null;
+                try {
+                    src = new AndroidFrameSource(stagedVideo, 1080);
+                    // 取区间内的 1/4 与 3/4 两处，避免总是只看到第一帧
+                    double[] times = { s + (e - s) * 0.25, s + (e - s) * 0.75 };
+                    for (int i = 0; i < times.length; i++) {
+                        int[] frame = src.frameAt(times[i]);
+                        if (frame == null) continue;
+                        int[] scaled = Creator.fitAndPad(frame, src.displayWidth(), src.displayHeight(),
+                                tw, th, 0xFF000000);
+                        android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(tw, th,
+                                android.graphics.Bitmap.Config.ARGB_8888);
+                        bmp.setPixels(scaled, 0, tw, 0, 0, tw, th);
+                        shots.add(bmp);
+                    }
+                } catch (Throwable t) {
+                    err = t.getMessage();
+                } finally {
+                    if (src != null) src.close();
+                }
+
+                final String ferr = err;
+                ui.post(new Runnable() {
+                    public void run() {
+                        dialog.dismiss();
+                        if (ferr != null) {
+                            new AlertDialog.Builder(CreatorActivity.this)
+                                    .setTitle("预览失败").setMessage(ferr)
+                                    .setPositiveButton("知道了", null).show();
+                            return;
+                        }
+                        if (shots.isEmpty()) { toast("取帧失败"); return; }
+                        showFramesDialog("预览 · 目标 " + tw + "×" + th
+                                + "（黑色为留边，画面不会被拉伸）", shots);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    /** 用纵向排列展示若干帧 */
+    private void showFramesDialog(String title, java.util.List<android.graphics.Bitmap> shots) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(12), dp(12), dp(12), dp(12));
+        ScrollView sv = new ScrollView(this);
+        sv.addView(box);
+        for (int i = 0; i < shots.size(); i++) {
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setImageBitmap(shots.get(i));
+            iv.setAdjustViewBounds(true);
+            iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            LinearLayout.LayoutParams il = lp(-1, dp(180));
+            il.bottomMargin = dp(8);
+            box.addView(iv, il);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .show();
+    }
+
     private void startMake() {
         if (running) return;
         if (probe == null || stagedVideo == null) { toast("请先选择视频"); return; }
         if (targetW < 2 || targetH < 2) { toast("分辨率无效"); return; }
 
         // 帧数预估，太大会先提醒（手机上生成很慢）
-        double dur = probe.durationSec;
-        int est = (int) Math.round(dur * fps);
+        double total = probe.durationSec;
+        double s = Math.max(0, trimStart);
+        double e = trimEnd > 0 ? Math.min(trimEnd, total) : total;
+        if (e <= s) e = Math.min(total, s + 0.1);
+        int est = (int) Math.round((e - s) * fps);
         if (est > 900) {
             new AlertDialog.Builder(this)
                     .setTitle("帧数较多")
                     .setMessage("按当前参数大约会生成 " + est + " 帧。\n\n手机生成较慢，"
-                            + "建议先用电脑端处理长视频；手机端更适合做几秒的短动画。\n\n仍然继续吗？")
+                            + "建议先用「取用区间」截短，或改用电脑端处理长视频。\n\n仍然继续吗？")
                     .setNegativeButton("取消", null)
                     .setPositiveButton("继续", new android.content.DialogInterface.OnClickListener() {
                         public void onClick(android.content.DialogInterface d, int w) { doMake(); }
@@ -482,6 +722,8 @@ public class CreatorActivity extends Activity {
         cancelled = false;
         startBtn.setEnabled(false);
         startBtn.setText("正在制作…");
+        cancelBtn.setEnabled(true);
+        cancelBtn.setText("取消当前任务");
         progressBox.setVisibility(View.VISIBLE);
         progressBar.setProgress(0);
         progressText.setText("准备中…");
@@ -490,15 +732,21 @@ public class CreatorActivity extends Activity {
             public void run() {
                 File outDir = new File(getExternalFilesDir(null) != null ? getExternalFilesDir(null) : getFilesDir(), "made");
                 if (!outDir.exists()) outDir.mkdirs();
-                final File outFile = new File(outDir, "bootanimation.zip");
+                // 开机/关机产物文件名不同，避免互相覆盖
+                final File outFile = new File(outDir, Creator.targetFileName(animTarget));
 
                 Creator.Options o = new Creator.Options();
+                o.target = animTarget;
                 o.width = targetW;
                 o.height = targetH;
                 o.fps = fps;
                 o.framePrefix = framePrefix;
                 o.padWidth = padWidth;
                 o.startNumber = startNumber;
+                o.startSec = trimStart;
+                o.endSec = trimEnd;
+                // 关机动画用 c：系统关掉之前必须整段播完
+                o.partType = animTarget == Creator.TARGET_SHUTDOWN ? 'c' : 'p';
 
                 String err = null;
                 Creator.Result result = null;
@@ -508,6 +756,7 @@ public class CreatorActivity extends Activity {
                     src = new AndroidFrameSource(stagedVideo, 1280);
                     result = Creator.convert(o, src, outFile, new Creator.Progress() {
                         public boolean onProgress(final double ratio, final String note) {
+                            if (cancelled) return false;
                             ui.post(new Runnable() {
                                 public void run() {
                                     progressBar.setProgress((int) (ratio * 1000));
@@ -535,7 +784,8 @@ public class CreatorActivity extends Activity {
                         progressBox.setVisibility(View.GONE);
                         if (ferr != null) {
                             new AlertDialog.Builder(CreatorActivity.this)
-                                    .setTitle("制作失败").setMessage(ferr)
+                                    .setTitle("已取消".equals(ferr) ? "已取消" : "制作失败")
+                                    .setMessage("已取消".equals(ferr) ? "本次制作已取消，没有留下半成品。" : ferr)
                                     .setPositiveButton("知道了", null).show();
                             return;
                         }

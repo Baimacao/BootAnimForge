@@ -17,6 +17,7 @@ public final class Creator {
     /* ---------------- 参数 ---------------- */
 
     public static final class Options {
+        public int target = TARGET_BOOT;
         public int width = 1080;
         public int height = 2400;
         public int fps = 30;
@@ -29,6 +30,27 @@ public final class Creator {
         /** 段设置：每段 [开始秒, 结束秒, 播放次数]；播放次数 0 = 无限循环 */
         public double[][] parts;             // null 时用单段无限循环覆盖整个区间
         public boolean opaque = true;        // 丢弃 alpha（开机动画一般不需要）
+        /** 段类型：p = 可被打断（开机动画常用）；c = 必须播完（关机动画建议） */
+        public char partType = 'p';
+    }
+
+    /* ---------------- 产物用途 ---------------- */
+
+    public static final int TARGET_BOOT = 0;
+    public static final int TARGET_SHUTDOWN = 1;
+
+    /** 产物文件名：开机 bootanimation.zip / 关机 shutdownanimation.zip */
+    public static String targetFileName(int target) {
+        return target == TARGET_SHUTDOWN ? "shutdownanimation.zip" : "bootanimation.zip";
+    }
+
+    public static String targetLabel(int target) {
+        return target == TARGET_SHUTDOWN ? "关机动画" : "开机动画";
+    }
+
+    /** 视频版（Android 12+）的文件名 */
+    public static String targetVideoFileName(int target) {
+        return target == TARGET_SHUTDOWN ? "shutdownanimation.mp4" : "bootanimation.mp4";
     }
 
     /* ---------------- 数据源抽象 ---------------- */
@@ -70,6 +92,12 @@ public final class Creator {
         public final double end;
         public final int frames;
         public final int count;
+        /**
+         * 段类型。未显式指定时为 0，表示「交给 Options.partType 决定」。
+         * 这点很重要：关机动画要靠 partType='c' 覆盖默认值，
+         * 如果这里直接给默认 'p' 就永远覆盖不上（PC 端踩过同样的坑）。
+         */
+        public char type;
         public Part(String dir, double start, double end, int frames, int count) {
             this.dir = dir; this.start = start; this.end = end; this.frames = frames; this.count = count;
         }
@@ -107,10 +135,15 @@ public final class Creator {
 
     /** 生成 desc.txt（CRLF 结尾，与 PC 端一致） */
     public static String buildDesc(Options o, java.util.List<Part> parts) {
+        // 段自身携带类型时优先；否则用 Options.partType（关机动画为 'c'）；
+        // 都没有才回落到默认 'p'。与 PC 端 desc.js 的规则一致。
+        char fallback = o.partType == 'c' || o.partType == 'f' ? o.partType : 'p';
         StringBuilder sb = new StringBuilder();
         sb.append(o.width).append(' ').append(o.height).append(' ').append(o.fps).append("\r\n");
         for (Part p : parts) {
-            sb.append("p ").append(p.count).append(" 0 ").append(p.dir).append("\r\n");
+            char type = (p.type == 'c' || p.type == 'f' || p.type == 'p') ? p.type : fallback;
+            // 关机动画用 c：系统关掉之前必须播完，否则会看不到完整动画
+            sb.append(type).append(' ').append(p.count).append(" 0 ").append(p.dir).append("\r\n");
         }
         return sb.toString();
     }

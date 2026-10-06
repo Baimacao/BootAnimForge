@@ -870,6 +870,44 @@ input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.22); }
   margin-top: 4px;
 }
 
+/* 取用区间滑块（比输入框更直观，拖动即时反馈） */
+.trim-slider { user-select: none; }
+.trim-track {
+  position: relative;
+  height: 28px;
+  border-radius: var(--shape-s);
+  background: var(--md-surface-container-highest);
+  cursor: pointer;
+  touch-action: none;
+}
+.trim-track::before {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background-image: repeating-linear-gradient(to right,
+    transparent 0 9.5%, color-mix(in srgb, var(--md-on-surface) 12%, transparent) 9.5% 10%);
+  pointer-events: none;
+}
+.trim-fill {
+  position: absolute; top: 0; bottom: 0;
+  background: color-mix(in srgb, var(--md-primary) 32%, transparent);
+  border-left: 2px solid var(--md-primary);
+  border-right: 2px solid var(--md-primary);
+  transition: left var(--dur-short4) var(--ease-standard), right var(--dur-short4) var(--ease-standard);
+}
+.trim-handle {
+  position: absolute; top: 50%;
+  width: 18px; height: 18px; margin-left: -9px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: var(--md-primary);
+  border: 2px solid var(--md-surface);
+  box-shadow: var(--elev-1);
+  cursor: ew-resize;
+  transition: transform var(--dur-short4) var(--ease-spring);
+}
+.trim-handle:hover, .trim-handle.drag { transform: translateY(-50%) scale(1.18); }
+
 /* 分段列表 */
 .part-row {
   display: grid;

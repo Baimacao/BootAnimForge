@@ -18,6 +18,7 @@ const ffs = require('./ffmpeg');
 const { buildDesc, buildPlan, validate, normalizePart, frameNumberOf } = require('./desc');
 const { createZipWriter, verifyZip, readZip } = require('./zip');
 const { buildMagiskModule } = require('./pack');
+const { getTarget } = require('./targets');
 const { uid, ensureDir, rmrf, num, int, fmtBytes } = require('./util');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -62,6 +63,7 @@ async function listFrames(dir) {
 async function buildClassicPayload(ctx) {
   const { req, info, cfg, plan, filter, workDir, hooks, checkAbort } = ctx;
   const { onLog } = hooks;
+  const tgt = getTarget(req.target);
 
   const staged = [];
   for (const part of plan.parts) {
@@ -131,7 +133,9 @@ async function buildClassicPayload(ctx) {
     staged.push(part);
   }
 
-  const descText = buildDesc(cfg);
+  // partType 由 target 决定（关机动画用 c：系统关掉前必须整段播完）。
+  // 必须显式传给 buildDesc —— cfg 是前端传来的配置，未必带这个字段。
+  const descText = buildDesc({ ...cfg, partType: tgt.partType });
   await fsp.writeFile(path.join(workDir, 'desc.txt'), descText, 'utf8');
   onLog('desc.txt:\n' + descText.trim().split(/\r?\n/).map((l) => '  ' + l).join('\n'));
 
@@ -158,6 +162,7 @@ async function buildClassicPayload(ctx) {
   return {
     kind: 'classic',
     ext: '.zip',
+    fileName: tgt.zipName,
     descText,
     frameCount: plan.totalFrames,
     addTo,
@@ -176,8 +181,9 @@ async function exists(p) {
 async function buildVideoPayload(ctx) {
   const { req, info, plan, filter, workDir, hooks, checkAbort } = ctx;
   const { onLog } = hooks;
+  const tgt = getTarget(req.target);
 
-  const videoOut = path.join(workDir, 'bootanimation.mp4');
+  const videoOut = path.join(workDir, tgt.videoName);
   const audioOut = path.join(workDir, 'audio.mp3');
   const partsCount = plan.parts.length;
 
@@ -258,14 +264,14 @@ async function buildVideoPayload(ctx) {
       onLog(`已生成 audio.mp3（${fmtBytes((await fsp.stat(audioOut)).size)}）`);
 
       // 合并音轨（视频流 copy，MP4 里也带上声音）
-      const merged = path.join(workDir, 'bootanimation-audio.mp4');
+      const merged = path.join(workDir, 'merged-audio.mp4');
       try {
         await ffs.runFfmpeg(ffs.buildMuxAudioArgs({
           video: videoOut, audio: audioOut, out: merged, bitrate: req.audioBitrate || 128,
         }), { signal: ctx.signal, onLog: (l) => onLog('[mux] ' + l) });
         await fsp.rm(videoOut, { force: true });
         await fsp.rename(merged, videoOut);
-        onLog('已把音轨并进 bootanimation.mp4');
+        onLog('已把音轨并进 ' + tgt.videoName);
       } catch (e) {
         onLog(`合并音轨失败（保留无音轨视频 + 独立 audio.mp3）：${e.message}`);
         await fsp.rm(merged, { force: true });
@@ -280,7 +286,7 @@ async function buildVideoPayload(ctx) {
   const audioBuf = hasAudio ? await fsp.readFile(audioOut) : null;
 
   const addTo = async (zip, prefix = '') => {
-    zip.add(`${prefix}bootanimation.mp4`, videoBuf);
+    zip.add(`${prefix}${tgt.videoName}`, videoBuf);
     let n = 1;
     if (audioBuf) { zip.add(`${prefix}audio.mp3`, audioBuf); n++; }
     return n;
@@ -318,6 +324,7 @@ async function run(req, hooks = {}) {
   const workDir = path.join(WORK_ROOT, jobId);
   const startedAt = Date.now();
   const format = req.format === 'video' ? 'video' : 'classic';
+  const tgt = getTarget(req.target);
 
   const checkAbort = () => {
     if (signal?.aborted) { const e = new Error('已取消'); e.cancelled = true; throw e; }
@@ -361,7 +368,8 @@ async function run(req, hooks = {}) {
   try {
     await ensureDir(workDir);
     onLog(`工作目录：${workDir}`);
-    onLog(`输出形态：${format === 'video' ? 'Android 12+ 视频版（bootanimation.mp4）' : '传统帧序列（desc.txt + partN）'}` +
+    onLog(`目标：${tgt.label}（${tgt.zipName}）`);
+    onLog(`输出形态：${format === 'video' ? `Android 12+ 视频版（${tgt.videoName}）` : '传统帧序列（desc.txt + partN）'}` +
       (req.magisk ? ' + Magisk 模块' : ''));
 
     /* ---------- 1. 探测 ---------- */
@@ -382,6 +390,7 @@ async function run(req, hooks = {}) {
       fps: int(req.fps, 30),
       progress: !!req.progress,
       quality: req.quality || 'png',
+      partType: tgt.partType,
       // 帧命名（厂商差异大：frame_00001.png / 001.png / …）
       framePrefix: req.framePrefix,
       padWidth: req.padWidth,
@@ -424,7 +433,8 @@ async function run(req, hooks = {}) {
     setStage('zip');
     const outputDir = req.outputDir && fs.existsSync(req.outputDir) ? req.outputDir : path.join(ROOT, 'output');
     await ensureDir(outputDir);
-    const rawName = (req.outputName || '').trim() || (req.magisk ? 'bootanimation-magisk.zip' : 'bootanimation.zip');
+    const rawName = (req.outputName || '').trim() ||
+      (req.magisk ? `${tgt.id === 'shutdown' ? 'shutdownanimation' : 'bootanimation'}-magisk.zip` : tgt.zipName);
     const safeOut = rawName.replace(/[\\/:*?"<>|]/g, '_');
     const outFile = path.join(outputDir, safeOut.endsWith('.zip') ? safeOut : safeOut + '.zip');
     if (fs.existsSync(outFile)) {
@@ -436,18 +446,18 @@ async function run(req, hooks = {}) {
       // 载荷文件：传统格式是 bootanimation.zip；视频格式是 bootanimation.mp4(+audio.mp3)
       const payloadFiles = [];
       if (payload.kind === 'classic') {
-        const payloadZip = path.join(workDir, 'payload-bootanimation.zip');
+        const payloadZip = path.join(workDir, 'payload-anim.zip');
         const pz = createZipWriter({ file: payloadZip, compress: !!req.zipCompress });
         const pEntries = await payload.addTo(pz, '');
         const pStat = pz.finish();
-        onLog(`载荷 bootanimation.zip：${pEntries} 个条目 / ${fmtBytes(pStat.bytes)}`);
-        payloadFiles.push({ name: 'bootanimation.zip', buffer: await fsp.readFile(payloadZip) });
+        onLog(`载荷 ${tgt.zipName}：${pEntries} 个条目 / ${fmtBytes(pStat.bytes)}`);
+        payloadFiles.push({ name: tgt.zipName, buffer: await fsp.readFile(payloadZip) });
       } else {
-        const videoPath = path.join(workDir, 'bootanimation.mp4');
+        const videoPath = path.join(workDir, tgt.videoName);
         const audioPath = path.join(workDir, 'audio.mp3');
-        payloadFiles.push({ name: 'bootanimation.mp4', buffer: await fsp.readFile(videoPath) });
+        payloadFiles.push({ name: tgt.videoName, buffer: await fsp.readFile(videoPath) });
         if (payload.audioBytes) payloadFiles.push({ name: 'audio.mp3', buffer: await fsp.readFile(audioPath) });
-        onLog(`载荷：bootanimation.mp4 ${fmtBytes(payload.videoBytes)}` + (payload.audioBytes ? ` + audio.mp3 ${fmtBytes(payload.audioBytes)}` : ''));
+        onLog(`载荷：${tgt.videoName} ${fmtBytes(payload.videoBytes)}` + (payload.audioBytes ? ` + audio.mp3 ${fmtBytes(payload.audioBytes)}` : ''));
       }
 
       const mo = req.magiskOpts || {};
@@ -455,12 +465,15 @@ async function run(req, hooks = {}) {
         outFile,
         files: payloadFiles,
         kind: payload.kind,
-        id: mo.id,
-        name: mo.name,
-        version: mo.version,
+        target: tgt.id,
+        // 只把用户**显式填过**的值传下去，空值交给 pack.js 按 target 取默认。
+        // 否则做关机动画时会沿用"开机动画"的模块 id 与名字（踩过）。
+        id: mo.id && String(mo.id).trim() ? mo.id : undefined,
+        name: mo.name && String(mo.name).trim() ? mo.name : undefined,
+        version: mo.version && String(mo.version).trim() ? mo.version : undefined,
         versionCode: mo.versionCode,
-        author: mo.author,
-        description: mo.description,
+        author: mo.author && String(mo.author).trim() ? mo.author : undefined,
+        description: mo.description && String(mo.description).trim() ? mo.description : undefined,
         pathKey: mo.pathKey,
         allPaths: mo.allPaths !== false,
         withReadme: mo.withReadme !== false,
@@ -487,7 +500,7 @@ async function run(req, hooks = {}) {
     // 必需条目随产物类型不同：Magisk 模块里没有 desc.txt
     const requireList = req.magisk
       ? ['module.prop', 'customize.sh']
-      : (payload.kind === 'classic' ? ['desc.txt'] : ['bootanimation.mp4']);
+      : (payload.kind === 'classic' ? ['desc.txt'] : [tgt.videoName]);
     const verify = await verifyZip(outFile, { require: requireList });
     if (!verify.ok) onLog('自检警告：' + verify.errors.join('；'));
     else onLog(`自检通过：${verify.entries} 个条目，必需文件齐全（${requireList.join('、')}）`);
@@ -497,7 +510,7 @@ async function run(req, hooks = {}) {
     if (format === 'video') {
       try {
         const inner = await readZip(outFile);
-        const key = [...inner.keys()].find((k) => k.endsWith('bootanimation.mp4'));
+        const key = [...inner.keys()].find((k) => k.endsWith('.mp4'));
         if (key) faststart = moovIsFirst(inner.get(key));
         onLog(`moov 位置检查：${faststart === true ? '在文件头 ✓' : faststart === false ? '在文件尾 ✗（可能影响起播）' : '无法判断'}`);
       } catch (e) {
@@ -516,6 +529,8 @@ async function run(req, hooks = {}) {
       ok: true,
       jobId,
       format,
+      target: tgt.id,
+      targetLabel: tgt.label,
       magisk: !!result.magisk,
       module: result.module || null,
       output: outFile,

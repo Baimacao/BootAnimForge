@@ -199,13 +199,17 @@ class CDP {
 
       const step = async (label, expr, expect = true, timeoutMs = 30000) => {
         const t0 = Date.now();
+        // expect === true 表示"只要为真值即可"（可能是数字、字符串），
+        // 不能写成 val === true —— 那样非布尔的真值会被判失败并丢弃，
+        // 最终报成 undefined，看起来像"取不到值"（踩过）。
+        const isGood = (v) => (expect === true ? !!v : v === expect);
         let val;
         while (Date.now() - t0 < timeoutMs) {
           try { val = await evalJs(expr); } catch { val = undefined; }
-          if (expect === true ? val : val === expect) break;
+          if (isGood(val)) break;
           await sleep(400);
         }
-        const good = expect === true ? !!val : val === expect;
+        const good = isGood(val);
         console.log(`  ${good ? '✓' : '✗'} ${label} → ${JSON.stringify(val)}`);
         if (!good) errors.push(`流程断言失败：${label} → ${JSON.stringify(val)}`);
         return val;
@@ -247,10 +251,51 @@ class CDP {
       await evalJs(`window.__baf.actions.goStep(2)`);
       await sleep(1200);
       await step('适配模式按钮已生成', `document.querySelectorAll('#scale-modes .opt').length === 3`, true);
+      await step('开机/关机选择已生成', `document.querySelectorAll('#target-modes .opt').length === 2`, true);
+      await step('默认选中的是开机动画', `window.__baf.state.config.target`, 'boot');
       await step('设备预设已填充', `document.querySelectorAll('#preset-select option').length > 10`, true);
       await step('分段编辑器已渲染', `document.querySelectorAll('#parts-list .part-row').length >= 1`, true);
       await step('desc 预览已生成', `document.querySelector('#desc-mini').textContent.trim().length > 0`, true);
       await step('校验消息已生成', `document.querySelectorAll('#rail-msgs .msg').length >= 1`, true);
+      await step('取用区间滑块已渲染', `!!document.querySelector('#trim-h-start') && !!document.querySelector('#trim-h-end')`, true);
+
+      // 切到关机动画：文件名、desc 段类型、rail 都应跟着变
+      await evalJs(`document.querySelectorAll('#target-modes .opt')[1].click()`);
+      await sleep(500);
+      await step('切到关机动画', `window.__baf.state.config.target`, 'shutdown');
+      await step('默认文件名变为 shutdownanimation.zip',
+        `document.querySelector('#in-outname').value`, 'shutdownanimation.zip');
+      await step('desc 段类型变为 c（必须播完）',
+        `/^c\\s/m.test(document.querySelector('#desc-mini').textContent)`, true);
+      await evalJs(`document.querySelectorAll('#target-modes .opt')[0].click()`);
+      await sleep(400);
+      await step('切回开机动画后文件名复位',
+        `document.querySelector('#in-outname').value`, 'bootanimation.zip');
+      await step('切回后段类型复位为 p',
+        `/^p\\s/m.test(document.querySelector('#desc-mini').textContent)`, true);
+
+      // 取用区间滑块：把起点拖到中间，首段 start 应跟着变
+      await evalJs(`(()=>{
+        const tr=document.querySelector('#trim-track');
+        const r=tr.getBoundingClientRect();
+        const h=document.querySelector('#trim-h-start');
+        h.dispatchEvent(new PointerEvent('pointerdown',{clientX:r.left,pointerId:1,bubbles:true}));
+        tr.dispatchEvent(new PointerEvent('pointermove',{clientX:r.left+r.width*0.25,pointerId:1,bubbles:true}));
+        tr.dispatchEvent(new PointerEvent('pointerup',{clientX:r.left+r.width*0.25,pointerId:1,bubbles:true}));
+      })()`);
+      await sleep(500);
+      // 注意：step(label, expr) 里的 expr 是在**浏览器**里求值的字符串，
+      // 不能直接把 Node 端的变量传进去（会被当成 JS 源码求值 → undefined）。
+      // 所以这里用浏览器表达式断言。
+      await step('拖动滑块改变了首段起点',
+        `Number(window.__baf.state.config.parts[0].start) > 0.1`, true);
+      await step('输入框与滑块同步',
+        `Math.abs(Number(document.querySelector('#in-start').value) - window.__baf.state.config.parts[0].start) < 0.05`, true);
+
+      // 复位：后面的断言基于整段（6s × fps），拖动会把区间截短，必须先还原
+      await evalJs(`(()=>{const i=document.querySelector('#in-start');i.value='0';i.dispatchEvent(new Event('change'));})()`);
+      await sleep(400);
+      await step('复位后首段起点回到 0', `window.__baf.state.config.parts[0].start`, 0);
 
       // 改一下参数：切到「铺满」再切回，改帧率
       await evalJs(`document.querySelectorAll('#scale-modes .opt')[1].click()`);
