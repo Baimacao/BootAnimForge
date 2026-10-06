@@ -359,6 +359,39 @@
             </div>
           </div>
 
+          <!-- 帧文件命名（厂商差异大，尤其手表） -->
+          <div id="naming-box" style="margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:1px solid var(--md-outline-variant)">
+            <div class="card-head" style="margin-bottom:var(--sp-3)">
+              <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5h6v14H3V5Zm2 2v10h2V7H5Zm6-2h6v14h-6V5Zm2 2v10h2V7h-2Zm6 0h2v10h-2V7Z"/></svg>
+              <h2>帧文件命名</h2>
+              <button class="help" data-help="naming">?</button>
+              <div class="spacer"></div>
+              <span class="tag" id="naming-tag">—</span>
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label class="field-label" for="in-prefix">前缀（可留空）</label>
+                <input class="input mono" id="in-prefix" type="text" spellcheck="false" placeholder="留空 = 纯数字">
+              </div>
+              <div class="field">
+                <label class="field-label" for="in-pad">补零位数</label>
+                <input class="input mono" id="in-pad" type="number" min="1" max="8" step="1">
+              </div>
+              <div class="field">
+                <label class="field-label" for="in-startnum">起始编号</label>
+                <input class="input mono" id="in-startnum" type="number" min="0" max="9999999" step="1">
+              </div>
+            </div>
+            <div class="input-row" style="margin-top:var(--sp-3)">
+              <span class="hint">常用写法：</span>
+              <button class="chip" data-naming="frame_|5|0"><b>frame_00000.png</b></button>
+              <button class="chip" data-naming="|3|1"><b>001.png（手表）</b></button>
+              <button class="chip" data-naming="|3|0"><b>000.png（手表）</b></button>
+              <button class="chip" data-naming="|5|1"><b>00001.png</b></button>
+            </div>
+            <div class="hint" style="margin-top:var(--sp-2)" id="naming-preview">—</div>
+          </div>
+
           <div class="grid-2" style="margin-top:var(--sp-4)">
             <div class="switch" id="compress-switch">
               <div class="switch-text">

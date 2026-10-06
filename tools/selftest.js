@@ -431,6 +431,67 @@ async function main() {
     namesVM.join(' | '));
   ok('模块只放了一个路径（allPaths=false）', namesVM.filter((n) => n.endsWith('bootanimation.mp4')).length === 1);
 
+  /* ---------------- 14. 自定义帧命名（手表常见写法） ---------------- */
+  section('14. 自定义帧文件命名');
+  const { normalizeNaming, frameNameOf, frameNumberOf } = require('../src/desc');
+
+  const n1 = normalizeNaming({ framePrefix: '', padWidth: 3, startNumber: 1 });
+  ok('纯数字命名：首帧 001', n1.first === '001', n1.first);
+  ok('纯数字命名：样例 001.png', n1.sample === '001.png', n1.sample);
+  ok('纯数字命名：pattern 为 %03d', n1.pattern === '%03d', n1.pattern);
+  ok('frameNameOf 递增到 030', frameNameOf(n1, 29) === '030', frameNameOf(n1, 29));
+
+  const n2 = normalizeNaming({ framePrefix: 'frame_', padWidth: 5, startNumber: 0 });
+  ok('默认通用命名 frame_00000', n2.first === 'frame_00000', n2.first);
+
+  const n3 = normalizeNaming({ framePrefix: '', padWidth: 0, startNumber: -5 });
+  ok('非法参数被夹到合法范围', n3.padWidth >= 1 && n3.startNumber >= 0, JSON.stringify(n3));
+
+  const n4 = normalizeNaming({ framePrefix: 'img/../x*y\\z', padWidth: 4 });
+  ok('前缀里的路径危险字符被剔除', !/[/*\\]/.test(n4.prefix), JSON.stringify(n4.prefix));
+
+  ok('编号解析 001.png → 1', frameNumberOf('001.png') === 1, String(frameNumberOf('001.png')));
+  ok('编号解析 frame_00042.png → 42', frameNumberOf('frame_00042.png') === 42, String(frameNumberOf('frame_00042.png')));
+  ok('编号解析 part0_0007.jpg → 7', frameNumberOf('part0_0007.jpg') === 7, String(frameNumberOf('part0_0007.jpg')));
+  ok('编号解析 audio.wav → null', frameNumberOf('audio.wav') === null, String(frameNumberOf('audio.wav')));
+
+  // 端到端：手表写法（480×480，001.png 起于 1，两段）
+  const rWatch = await convert.run({
+    input: src16x9, outputDir: OUT, outputName: 'test-watch.zip',
+    format: 'classic', width: 480, height: 480, fps: 12, scaleMode: 'fit', quality: 'png-fast',
+    framePrefix: '', padWidth: 3, startNumber: 1,
+    parts: [
+      { dir: 'part0', type: 'p', count: 1, pause: 0, start: 0, end: 1 },
+      { dir: 'part1', type: 'p', count: 0, pause: 0, start: 1, end: 2.5 },
+    ],
+  }, { onLog: () => {} });
+  const zw = await readZip(rWatch.output);
+  const namesW = [...zw.keys()];
+  const p0w = namesW.filter((n) => n.startsWith('part0/') && n.endsWith('.png'));
+  const p1w = namesW.filter((n) => n.startsWith('part1/') && n.endsWith('.png'));
+  ok('手表写法：part0 首帧 001.png', p0w[0] === 'part0/001.png', p0w[0]);
+  ok('手表写法：part0 末帧 012.png（1s × 12fps）', p0w[p0w.length - 1] === 'part0/012.png', p0w[p0w.length - 1]);
+  ok('手表写法：part1 首帧同样是 001.png', p1w[0] === 'part1/001.png', p1w[0]);
+  ok('手表写法：全程不含 frame_ 前缀', !namesW.some((n) => n.includes('frame_')), namesW.slice(0, 4).join(','));
+  ok('手表写法：zip 顺序自检通过', rWatch.verify.ok, (rWatch.verify.errors || []).join('；'));
+  ok('手表写法：帧数 12 + 18 = 30', rWatch.frames === 30, String(rWatch.frames));
+  const numsW = p0w.map((f) => frameNumberOf(f));
+  ok('手表写法：part0 编号严格递增', numsW.every((v, i) => i === 0 || v === numsW[i - 1] + 1), numsW.join(','));
+
+  // 补零位数不足必须被拦下，而不是生成会撞名的坏包
+  try {
+    await convert.run({
+      input: src16x9, outputDir: OUT, outputName: 'test-padfail.zip',
+      format: 'classic', width: 320, height: 320, fps: 30, framePrefix: '', padWidth: 1, startNumber: 1,
+      parts: [{ dir: 'part0', type: 'p', count: 0, pause: 0, start: 0, end: 1 }],
+    }, { onLog: () => {} });
+    ok('补零位数不足被拦截', false, '未抛错');
+  } catch (e) {
+    ok('补零位数不足被拦截',
+      Array.isArray(e.validation?.errors) && e.validation.errors.some((x) => x.includes('补零')),
+      (e.validation?.errors || [e.message]).join('；'));
+  }
+
   /* ---------------- 汇总 ---------------- */
   console.log(results.join('\n'));
   console.log(`\n结果：${pass} 通过 / ${fail} 失败\n`);

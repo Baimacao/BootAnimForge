@@ -43,10 +43,18 @@ async function collect() {
   }
   for (const d of INCLUDE_DIRS) await walk(path.join(ROOT, d), d);
 
-  // 引擎
-  for (const exe of ['ffmpeg.exe', 'ffprobe.exe']) {
+  // 引擎 + Node 运行时：便携版的目标是「解压即用、无任何前置」
+  for (const exe of ['ffmpeg.exe', 'ffprobe.exe', 'node.exe']) {
     const p = path.join(ROOT, 'runtime', exe);
-    if (!fs.existsSync(p)) throw new Error(`缺少 runtime/${exe}，请先运行 node tools/fetch-ffmpeg.js`);
+    if (!fs.existsSync(p)) {
+      if (exe === 'node.exe') {
+        console.log('  · 注意：runtime/node.exe 不存在，将跳过打包 Node。');
+        console.log('    这样便携版仍要求机器上已装 Node；要「无前置」请先运行：');
+        console.log('    powershell -ExecutionPolicy Bypass -File tools\\fetch-node.ps1');
+        continue;
+      }
+      throw new Error(`缺少 runtime/${exe}，请先运行 node tools/fetch-ffmpeg.js`);
+    }
     files.push({ abs: p, zip: `runtime/${exe}` });
   }
   const lic = path.join(ROOT, 'runtime', 'FFMPEG-LICENSE.txt');
@@ -72,13 +80,14 @@ async function main() {
 
   // 附一份「先看这个」
   zip.add('使用说明.txt', Buffer.from(
-    `开机动画工坊 BootAnimForge ${VERSION}（便携版）
+    `开机动画工坊 BootAnimForge ${VERSION}（便携版 · 无需任何前置）
 ================================================
 
-这个包里已经带好视频引擎，解压后双击 启动.cmd 即可用，不需要联网下载。
+这个包里已经带好：
+  runtime\\node.exe    Node.js 运行时
+  runtime\\ffmpeg.exe  视频引擎
 
-需要：Windows 10/11 + Node.js 18 或更高版本 + Edge（或 Chrome）
-      Node.js 下载：https://nodejs.org/
+所以解压后直接双击 启动.cmd 就能用，不需要安装 Node.js，也不需要联网下载。
 
 用法
 ----
@@ -86,8 +95,16 @@ async function main() {
 2. 双击 启动.cmd
 3. 拖入视频 → 设分辨率与循环 → 导出
 
-产出的 bootanimation.zip 可直接刷入，或在界面里勾选「同时生成 Magisk 模块」
-得到一个能直接在 Magisk App 里安装的模块 zip。
+界面会在一个独立的 Edge 窗口里打开（无地址栏、无标签）。
+需要机器上有 Microsoft Edge 或 Google Chrome（Win10/11 基本都有）。
+
+产出的 bootanimation.zip 可直接刷入；勾选「同时生成 Magisk 模块」
+还能得到一个能在 Magisk App 里直接安装的模块 zip。
+
+手表用户注意
+------------
+部分安卓手表的帧文件名是纯数字（如 001.png），而不是 frame_00000.png。
+在「输出与打包 → 帧文件命名」里把前缀清空、补零位数设为 3、起始编号设为 1 即可。
 
 更详细的说明见 README.md。
 `, 'utf8'));

@@ -122,6 +122,10 @@ export function defaultConfig() {
     keepAlpha: true,
     quality: 'png-fast',
     jpegQuality: 4,
+    // 帧文件命名（厂商差异大：通用是 frame_00000.png，很多手表是 001.png）
+    framePrefix: 'frame_',
+    padWidth: 5,
+    startNumber: 0,
     zipCompress: false,
     audio: false,
     progress: false,
@@ -244,7 +248,31 @@ export function planParts() {
     return { ...p, index: i, dir: p.dir || `part${i}`, start, end, frames };
   });
   const frames = list.reduce((a, p) => a + p.frames, 0);
-  return { fps, list, frames };
+  return { fps, list, frames, naming: naming() };
+}
+
+/* ---------------- 帧命名 ---------------- */
+
+export const DEFAULT_PREFIX = 'frame_';
+
+/** 规范化帧命名（与后端 desc.js 的 normalizeNaming 同规则） */
+export function naming(cfg = state.config) {
+  const prefix = String(cfg.framePrefix ?? DEFAULT_PREFIX).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
+  const padWidth = clamp(Math.round(Number(cfg.padWidth)) || 5, 1, 8);
+  const startNumber = clamp(Math.round(Number(cfg.startNumber)) || 0, 0, 10000000);
+  const nameOf = (seq) => `${prefix}${String(startNumber + seq).padStart(padWidth, '0')}`;
+  return {
+    prefix, padWidth, startNumber,
+    index: (file) => {
+      const base = String(file).replace(/\.[a-z0-9]+$/i, '');
+      const m = base.match(/(\d+)(?!.*\d)/);
+      return m ? Number(m[1]) : null;
+    },
+    nameOf,
+    first: nameOf(0),
+    sample: `${nameOf(0)}.png`,
+    pattern: `${prefix}%0${padWidth}d`,
+  };
 }
 
 /** 播放一遍动画需要的时间（含暂停） */
@@ -294,6 +322,14 @@ export function buildDescPreview() {
     lines.push(f.join(' '));
   }
   return lines;
+}
+
+/** 帧命名预览：首帧、末帧文件名与帧数 */
+export function namingPreview() {
+  const nm = naming();
+  const { frames } = planParts();
+  const last = nm.nameOf(Math.max(0, frames - 1));
+  return { ...nm, frames, last: `${last}.png` };
 }
 
 export function describeLine(line, index) {
@@ -387,6 +423,18 @@ export function validate() {
     if (!String(mo.name || '').trim()) warnings.push('Magisk 模块名称为空，将使用默认名');
     if (!/^\d+(\.\d+)*$/.test(String(mo.version || ''))) warnings.push('模块版本建议用数字点号形式，如 1.0.0');
     notes.push('将额外生成 Magisk 模块 zip（可直接刷入，卸载即还原）');
+  }
+
+  // 帧命名：补零位数不够会「撞名」
+  if (!isVideo) {
+    const nm = naming();
+    const maxNo = nm.startNumber + Math.max(0, frames - 1);
+    if (String(maxNo).length > nm.padWidth) {
+      errors.push(`帧命名补零位数不够：共 ${frames} 帧，编号最大到 ${maxNo}（${String(maxNo).length} 位），` +
+        `而补零位数是 ${nm.padWidth} 位，文件名会重复。请改为 ${String(maxNo).length} 位以上`);
+    }
+    notes.push(`帧文件命名：${nm.prefix || '（无前缀）'}${'0'.repeat(nm.padWidth)} 起于 ${nm.startNumber}，例如 ${nm.sample}`);
+    if (!nm.prefix) notes.push('采用纯数字命名（如 001.png）—— 部分安卓手表用这种写法；通用设备通常用 frame_ 前缀');
   }
 
   return { errors, warnings, notes, frames };

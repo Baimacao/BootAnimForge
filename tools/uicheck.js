@@ -348,6 +348,58 @@ class CDP {
       const shot3 = await cdp.send('Page.captureScreenshot', { format: 'png' });
       fs.writeFileSync(path.join(ROOT, '.work', 'ui-shot-video-done.png'), Buffer.from(shot3.data, 'base64'));
       console.log('视频版完成页截图：.work/ui-shot-video-done.png');
+
+      // ---------- 第三轮：自定义帧命名（手表写法 001.png） ----------
+      console.log('\n=== 第三轮：自定义帧命名（手表 001.png 写法）===');
+      await evalJs(`window.__baf.actions.goStep(2)`);
+      await sleep(600);
+      await evalJs(`window.__baf.actions.setFormat('classic')`);
+      await sleep(400);
+      await step('回到传统帧序列格式', `window.__baf.state.config.format`, 'classic');
+      const namingBoxState = await evalJs(`(() => {
+        const n = document.querySelector('#naming-box');
+        const cs = n ? getComputedStyle(n) : null;
+        return { fmt: window.__baf.state.config.format, hiddenProp: n ? n.hidden : 'no-el',
+                 display: cs ? cs.display : null, rectH: n ? Math.round(n.getBoundingClientRect().height) : null };
+      })()`);
+      console.log(`  · 帧命名区状态：${JSON.stringify(namingBoxState)}`);
+      await step('帧命名区可见', `(() => {
+        const n = document.querySelector('#naming-box');
+        return !!n && !n.hidden && getComputedStyle(n).display !== 'none';
+      })()`, true);
+
+      await evalJs(`(() => {
+        const chip = [...document.querySelectorAll('[data-naming]')].find(c => c.dataset.naming === '|3|1');
+        chip.click();
+      })()`);
+      await sleep(500);
+      await step('命名预设已应用（前缀为空）', `window.__baf.state.config.framePrefix`, '');
+      await step('补零位数 = 3', `window.__baf.state.config.padWidth`, 3);
+      await step('起始编号 = 1', `window.__baf.state.config.startNumber`, 1);
+      await step('命名预览里出现 001.png', `(() => {
+        const t = document.querySelector('#naming-preview').textContent || '';
+        return t.includes('001.png');
+      })()`, true);
+
+      const outDir3 = path.join(ROOT, '.work', 'uicheck-out').replace(/\\/g, '\\\\');
+      await evalJs(`(() => {
+        const s = window.__baf.state;
+        s.config.outputDir = '${outDir3}';
+        s.config.magisk = false;                    // 只做纯动画，才方便核对帧命名
+        s.config.outputName = 'ui-watch.zip';
+        s.config.width = 480; s.config.height = 480;
+        s.config.fps = 12; s.config.quality = 'png-fast';
+        s.config.parts = [];
+        window.__baf.actions.computeValidation();
+      })()`);
+      await evalJs(`window.__baf.actions.goStep(3)`);
+      await sleep(900);
+      await step('预检无错误（手表命名）', `window.__baf.state.validation.errors.length`, 0);
+      await step('打包清单写明了帧命名', `document.querySelector('#zip-plan').textContent.includes('.png')`, true);
+      await evalJs(`document.querySelector('#btn-run').click()`);
+      await step('手表命名转换完成', `window.__baf.state.result && window.__baf.state.result.output`, true, 180000);
+      const watchZip = await evalJs(`window.__baf.state.result.output`);
+      console.log('  手表命名产物：' + watchZip);
     }
 
     // ---------- 文档截图（--docshot） ----------

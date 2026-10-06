@@ -58,11 +58,59 @@ function normalizePart(p, index) {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* 帧文件命名                                                          */
+/* ------------------------------------------------------------------ */
+
+/** 通用写法（Android 官方 bootanimation 生成脚本常见） */
+const DEFAULT_PREFIX = 'frame_';
+
+/**
+ * 第 seq 张（0 基）的文件名，不含扩展名。
+ * 例：prefix='' pad=3 start=0 → "000"；prefix='frame_' pad=5 → "frame_00000"
+ */
+function frameNameOf(naming, seq) {
+  const n = (Number(naming.startNumber) || 0) + (Number(seq) || 0);
+  return `${naming.prefix || ''}${String(n).padStart(Number(naming.padWidth) || 5, '0')}`;
+}
+
+/**
+ * 规范化自定义帧命名。
+ *
+ * 厂商差异很大：常见的是 `frame_00001.png`，但很多安卓手表（实测一台 480×480 的手表）
+ * 直接用纯数字 `001.png`。所以前缀、补零位数、起始编号都必须可配，
+ * 而不是把 `frame_%05d` 写死。
+ *
+ * @param {object} cfg { framePrefix, padWidth, startNumber }
+ */
+function normalizeNaming(cfg = {}) {
+  // 前缀允许为空（纯数字命名）；剔除会造成路径问题的字符
+  const prefix = String(cfg.framePrefix ?? DEFAULT_PREFIX).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
+  const padWidth = clamp(int(cfg.padWidth, 5), 1, 8);
+  const startNumber = clamp(int(cfg.startNumber, 0), 0, 10000000);
+  const naming = { prefix, padWidth, startNumber };
+  return {
+    ...naming,
+    pattern: `${prefix}%0${padWidth}d`,
+    first: frameNameOf(naming, 0),
+    sample: `${frameNameOf(naming, 0)}.png`,
+  };
+}
+
+/**
+ * 从文件名里取出「最后一段连续数字」作为帧编号 —— 与 zip.js 的顺序检查同规则。
+ * 例：frame_00012.png → 12；001.png → 1；part0_0007.jpg → 7
+ */
+function frameNumberOf(fileName) {
+  const base = String(fileName).replace(/\.[a-z0-9]+$/i, '');
+  const m = base.match(/(\d+)(?!.*\d)/);
+  return m ? int(m[1], 0) : null;
+}
+
 /**
  * 生成 desc.txt 文本（CRLF：Android 解析器对行尾不敏感，但 CRLF 最保险）
  * @param {object} cfg  {width,height,fps,progress,parts:[...]}
- */
-function buildDesc(cfg) {
+ */function buildDesc(cfg) {
   const width = Math.max(1, int(cfg.width, 1080));
   const height = Math.max(1, int(cfg.height, 1920));
   const fps = clamp(int(cfg.fps, 30), 1, 240);
@@ -99,6 +147,7 @@ function buildPlan(cfg, info) {
   const parts = (cfg.parts || []).map(normalizePart);
   // 帧文件扩展名必须由「图片格式」决定：JPEG 模式产出 .jpg，其余为 .png
   const suffix = String(cfg.quality || 'png') === 'mjpeg' ? '.jpg' : '.png';
+  const naming = normalizeNaming(cfg);
   let total = 0;
   const items = parts.map((p, i) => {
     const frames = frameCount(p.start, p.end, fps);
@@ -107,11 +156,20 @@ function buildPlan(cfg, info) {
       ...p,
       index: i,
       frames,
-      pattern: 'frame_%05d' + suffix,
-      startNumber: 0,
+      pattern: naming.pattern + suffix,
+      startNumber: naming.startNumber,
+      naming,
     };
   });
-  return { width: int(cfg.width, 1080), height: int(cfg.height, 1920), fps, parts: items, totalFrames: total, suffix };
+  return {
+    width: int(cfg.width, 1080),
+    height: int(cfg.height, 1920),
+    fps,
+    parts: items,
+    totalFrames: total,
+    suffix,
+    naming,
+  };
 }
 
 /**
@@ -154,6 +212,22 @@ function validate(cfg, info, opts = {}) {
   const parts = (cfg.parts || []).map(normalizePart);
   if (!parts.length) errors.push('至少需要 1 个动画段');
   if (parts.length > 32) errors.push('动画段过多（上限 32）');
+
+  // 帧命名：补零位数不够时会「撞名」，必须拦住
+  if (format === 'classic') {
+    const naming = normalizeNaming(cfg);
+    const plan = buildPlan(cfg, info);
+    const maxNo = naming.startNumber + Math.max(0, plan.totalFrames - 1);
+    if (String(maxNo).length > naming.padWidth) {
+      errors.push(`帧命名补零位数不够：共 ${plan.totalFrames} 帧，编号最大会到 ${maxNo}（${String(maxNo).length} 位），` +
+        `而补零位数设为 ${naming.padWidth} 位，会造成文件名重复。请把补零位数改为 ${String(maxNo).length} 位以上`);
+    }
+    notes.push(`帧文件命名：${naming.prefix || '（无前缀）'}${'0'.repeat(naming.padWidth)}` +
+      ` 起于 ${naming.startNumber}，例如 ${naming.sample}`);
+    if (!naming.prefix) {
+      notes.push('采用纯数字命名（如 001.png）—— 部分安卓手表用这种写法；通用设备一般用 frame_ 前缀');
+    }
+  }
 
   const seen = new Set();
   parts.forEach((p, i) => {
@@ -216,5 +290,6 @@ function describeDesc(cfg) {
 
 module.exports = {
   buildDesc, buildPlan, validate, normalizePart, frameCount,
-  hexColor, describeDesc, DIR_RE,
+  normalizeNaming, frameNameOf, frameNumberOf,
+  hexColor, describeDesc, DIR_RE, DEFAULT_PREFIX,
 };

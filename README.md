@@ -3,7 +3,9 @@
 把 MP4 等视频转成安卓开机动画（`bootanimation.zip`）的 Windows 工具，并可直接产出**可刷入的 Magisk 模块**。
 
 界面是 Material Design 3 风格，带非线性动效（MD3 emphasized 曲线、shared-axis X 转场）、实时预览、时间轴分段编辑器和内置教程。
-引擎是本地 ffmpeg，界面在独立的 Edge 应用窗口里运行 —— 不依赖 Electron，不装 npm 包，改代码不用编译。
+引擎是本地 ffmpeg，界面在独立的 Edge 应用窗口里运行 —— 不依赖 Electron，改代码不用编译。
+
+**无需任何前置**：双击启动器即可，Node 运行时与 ffmpeg 引擎都由程序自己准备。
 
 ![配置页](docs/screenshot-configure.png)
 
@@ -13,7 +15,14 @@
 
 双击 **`启动.cmd`**（文件名是中文，但文件内容刻意只写 ASCII —— 原因见下）。
 
-首次运行会自动准备视频引擎（ffmpeg/ffprobe，约 115 MB，走 npm 镜像，实测几秒），然后弹出应用窗口。
+首次运行会自动准备两样东西，都放在程序目录的 `runtime\` 里：
+
+| 组件 | 大小 | 来源 |
+|---|---|---|
+| `runtime\node.exe` | ~35 MB | Node.js 官方发行版（npmmirror / nodejs.org 镜像） |
+| `runtime\ffmpeg.exe` `ffprobe.exe` | ~115 MB | `@ffmpeg-installer` / `@ffprobe-installer` 预编译构建 |
+
+已装过 Node 的机器会直接用系统 Node，不会重复下载。
 
 > **为什么 `.cmd` 里不能写中文**：cmd.exe 在 `chcp 65001` 生效**之前**就已经按 OEM 代码页
 > （中文系统是 GBK）解析整个批处理文件。UTF-8 编码的中文注释会被解析成一堆乱码命令并逐条执行，
@@ -30,7 +39,7 @@
 | `node tools/server-ctl.js start` / `stop` / `status` | 开发用：后台启停，PID 记录在 `.work/server.pid`；`stop` 会连占着端口的旧实例一起清掉 |
 | `node tools/server-ctl.js open` | 服务已在跑时，只把应用窗口打开 |
 
-要求：Windows 10/11 + Node.js ≥ 18 + Edge（或 Chrome）。ffmpeg 由启动器自动下载到 `runtime/`。
+要求：Windows 10/11 + Edge 或 Chrome。Node.js 由启动器自动准备，**不需要手动安装**。
 
 > 重复点「启动.cmd」不会开出第二个服务：检测到已有实例就直接复用并弹窗口。
 
@@ -50,14 +59,34 @@
 - **两种输出格式**
   - **传统帧序列**：`desc.txt` + `partN/` PNG 帧，Android 4–14 通吃
   - **视频版（Android 12+）**：`bootanimation.mp4`，体积通常只有帧序列的 1/10，自动保证 **moov 前置 + yuv420p + Main profile + 无 B 帧**
+- **自定义帧文件命名**：前缀 / 补零位数 / 起始编号都能改，兼容 `frame_00000.png` 与手表常见的纯数字 `001.png`；补零位数不够会直接拦下而不是产出撞名的坏包。
 - **分段与循环**：时间轴上随时切分，每段独立设置 `p/c/f` 类型、循环次数（0 = 无限）、暂停帧数、淡出帧数、背景色。
 - **一键生成 Magisk 模块**：额外产出一个可直接刷入的模块 zip（`module.prop` + `customize.sh` + 系统载荷 + 中文说明），卸载即恢复原动画。
 
-<img src="docs/screenshot-output.png" alt="输出格式与 Magisk 模块设置" width="720">
+<img src="docs/screenshot-output.png" alt="输出格式与帧命名设置" width="720">
 
 - **试播**：按 `desc.txt` 的真实播放逻辑（循环次数 + 暂停）模拟一遍，直观看到开机时会怎么播。
 - **合规输出**：传统格式的 `desc.txt` 严格按 AOSP 规范生成；zip 默认 `STORE`（等价 `zip -0`），帧按序存放，产出前自动自检。
-- **大量可自定义项**：分辨率、帧率、图片格式（PNG 三档压缩 / JPEG 质量）、透明通道、背景色、zip 压缩、视频版 CRF 与 preset、音轨码率、输出目录与文件名、Magisk 模块元信息与写入路径。
+- **大量可自定义项**：分辨率、帧率、图片格式（PNG 三档压缩 / JPEG 质量）、帧文件命名、透明通道、背景色、zip 压缩、视频版 CRF 与 preset、音轨码率、输出目录与文件名、Magisk 模块元信息与写入路径。
+
+### 手表用户注意
+
+实测一台 480×480 手表，它的开机动画是这样的：
+
+```
+desc.txt:  480 480 60      ← 方形，60fps
+           p 1 0 part0     ← 开场播 1 次
+           p 0 0 part1     ← 主体无限循环
+帧命名:      part0/001.png … part0/360.png
+           part1/001.png … part1/143.png
+```
+
+注意帧名是**纯数字 3 位补零**，不是 `frame_00000.png`。制作同类设备时：
+
+1. 分辨率选「手表 480 × 480」
+2. 输出格式保持「传统帧序列」
+3. 在「帧文件命名」里点 **`001.png（手表）`** 预设（前缀留空、补零 3 位、起始 1）
+4. 想要「先播一次再循环」，就在时间轴上切一刀，把第一段循环次数设为 1、第二段设为 0
 
 ### 快捷键
 
@@ -156,13 +185,16 @@ BootAnimForge/
 │   ├── css/app.css           MD3 设计令牌 + 组件 + 动效
 │   └── js/{app,core,data}.js 交互 / 状态与 API / 预设与文案
 ├── tools/
+│   ├── fetch-node.ps1        获取便携 Node 运行时（首次运行自动调用）
 │   ├── fetch-ffmpeg.js       获取 ffmpeg 运行时（多源回退）
-│   ├── selftest.js           后端端到端自检（合成素材，75 项断言）
-│   ├── uicheck.js            无头 Edge + CDP 检查前端与整条流程（28 项断言）
+│   ├── selftest.js           后端端到端自检（合成素材，94 项断言）
+│   ├── uicheck.js            无头 Edge + CDP 检查前端与整条流程（47 项断言）
 │   ├── server-ctl.js         开发用启停
+│   ├── make-portable.js      打便携包（含 Node + ffmpeg）
 │   ├── publish.js            发布到 GitHub（纯 REST API）
+│   ├── release.js            打 tag / 建 Release / 传资产
 │   └── gh.js                 凭据解析与 GitHub API 封装
-├── runtime/                  ffmpeg.exe / ffprobe.exe（自动下载，不入库）
+├── runtime/                  node.exe / ffmpeg.exe / ffprobe.exe（自动下载，不入库）
 ├── docs/                     规范说明、截图
 └── output/                   默认输出目录
 ```
@@ -174,8 +206,10 @@ BootAnimForge/
 | 零 npm 依赖 | 后端只用 Node 内置模块；不用装包、没有供应链风险、不会因依赖过期而腐烂 |
 | 前端无构建 | 原生 ES Module + CSS 变量。改一行 CSS，刷新即见 |
 | 界面用 Edge 应用窗口 | 不背 Electron 的 200 MB；窗口无地址栏无标签，手感和原生一致 |
+| 自带 Node 运行时 | 「不需要装任何东西」比「先装 Node」重要得多。已装 Node 的机器仍优先用系统的 |
 | 自写 ZIP 写入器 | 通用 zip 库会改变条目顺序或强制压缩；开机动画要求帧**按序存放**且推荐**不压缩** |
 | 自写 ZIP 读取器 | 自检时要能解出真实帧做像素级验证（例如证明四角是背景色而非被拉伸） |
+| 帧命名可配而非写死 | 厂商差异大：`frame_00000.png` 与手表的 `001.png` 并存，写死一种就会在另一种上失败 |
 | 视频版不用 ultrafast preset | ultrafast 会降级成 Constrained Baseline（禁 CABAC），同画质体积明显变大；编码后还会校验 profile，不达标自动重编 |
 | ffmpeg 走 npm 镜像 | gyan.dev / GitHub 在本机实测 0.04 MB/s（要 45 分钟），npmmirror 是 25 MB/s（几秒） |
 
@@ -184,13 +218,14 @@ BootAnimForge/
 ## 自检与验证
 
 ```bash
-node tools/fetch-ffmpeg.js        # 准备引擎
-node tools/selftest.js            # 后端端到端：75 项断言
-node tools/server-ctl.js start    # 起服务
-node tools/uicheck.js --flow      # 无头浏览器跑完整流程：38 项断言
-node tools/uicheck.js --anim      # 动效验证：14 项断言（MD3 运动系统）
-node tools/uicheck.js --docshot   # 重新生成 docs/ 下的截图
-node tools/make-portable.js       # 打便携包（含 ffmpeg 引擎）
+node tools/fetch-node.ps1          # 准备便携 Node 运行时（无前置安装用）
+node tools/fetch-ffmpeg.js         # 准备 ffmpeg 引擎
+node tools/selftest.js             # 后端端到端：94 项断言
+node tools/server-ctl.js start     # 起服务
+node tools/uicheck.js --flow       # 无头浏览器跑完整流程：47 项断言
+node tools/uicheck.js --anim       # 动效验证：14 项断言（MD3 运动系统）
+node tools/uicheck.js --docshot    # 重新生成 docs/ 下的截图
+node tools/make-portable.js 1.1.0  # 打便携包（含 Node + ffmpeg，解压即用）
 ```
 
 `selftest.js` 会用 ffmpeg 合成测试素材（横屏、旋转、带 alpha），覆盖：
@@ -201,6 +236,7 @@ node tools/make-portable.js       # 打便携包（含 ffmpeg 引擎）
 - zip 结构（`desc.txt` 存在、条目有序、无损坏）
 - **视频版**：H.264 / Main profile / yuv420p / 无 B 帧 / moov 前置 / 音轨
 - **Magisk 模块**：`module.prop` 字段、`customize.sh` 权限、载荷落位、模块内载荷本身合法
+- **自定义帧命名**：纯数字前缀、补零位数、起始编号、文件名编号解析、手表写法端到端产出（`part0/001.png`）、补零位数不足被拦截
 - 任务取消、参数校验拦截
 
 `uicheck.js` 用 Edge 无头模式 + DevTools 协议驱动真实界面：载入视频 → 改参数 → 切分 → 导出 →

@@ -7,7 +7,7 @@ import {
   baseName, ext, dirName, escapeHtml, setText, state, loadState, saveState, defaultConfig,
   ensureParts, planParts, estimateDuration, estimateBytes, buildDescPreview,
   describeLine, validate, validationToMessages, api, watchJob, toast,
-  matchPreset, groupedPresets, STAGE_LABEL,
+  matchPreset, groupedPresets, STAGE_LABEL, naming, namingPreview,
 } from './core.js';
 import { DEVICE_PRESETS, SCALE_MODES, FORMAT_MODES, HELP, TUTORIAL, VIDEO_EXT, QUALITY_MODES } from './data.js';
 
@@ -685,18 +685,7 @@ function setFormat(fmt) {
   const c = state.config;
   c.format = fmt;
   const isVideo = fmt === 'video';
-  $$('.opt[data-format]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.format === fmt)));
-
-  const videoCard = $('#video-card');
-  if (videoCard) videoCard.hidden = !isVideo;
-  const frameOpts = $('#frame-opts');
-  if (frameOpts) frameOpts.hidden = isVideo;
-  const jpegField = $('#jpeg-field');
-  if (jpegField) jpegField.hidden = isVideo || c.quality !== 'mjpeg';
-  const compressSwitch = $('#compress-switch');
-  if (compressSwitch) compressSwitch.hidden = isVideo;
-  const alphaSwitch = $('#alpha-switch');
-  if (alphaSwitch) alphaSwitch.hidden = isVideo;
+  applyFormatVisibility();
 
   // 文件名默认值：视频版仍然打成 zip，所以默认名不变，但用户改成别的更好认
   const nameInput = $('#in-outname');
@@ -767,6 +756,30 @@ function aspectDiagram(mode) {
     <circle cx="60" cy="23" r="9" fill="none" stroke="var(--md-surface)" stroke-width="2"/></svg>`;
 }
 
+/**
+ * 集中处理「哪些控件属于哪种输出格式」。
+ *
+ * 之前这段显隐逻辑散在 setFormat / syncConfigureInputs / renderConfigure 三处，
+ * 结果出现「某些路径没跑到 → 控件该显示却是隐藏的」这类不一致（真踩过）。
+ * 现在只有一个入口，且每次都用 state 重新推导，不依赖上一次的状态。
+ */
+function applyFormatVisibility() {
+  const c = state.config;
+  const isVideo = c.format === 'video';
+  const set = (sel, visible) => {
+    const n = $(sel);
+    if (n) n.hidden = !visible;
+  };
+  set('#video-card', isVideo);            // 视频版专属参数
+  set('#frame-opts', !isVideo);           // 帧图片格式（JPEG/PNG）
+  set('#naming-box', !isVideo);           // 帧文件命名
+  set('#compress-switch', !isVideo);      // zip 压缩
+  set('#alpha-switch', !isVideo);         // 透明通道
+  set('#jpeg-field', !isVideo && c.quality === 'mjpeg');
+  set('#magisk-opts', !!c.magisk);
+  $$('.opt[data-format]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.format === c.format)));
+}
+
 function syncConfigureInputs() {
   const c = state.config;
   const mo = c.magiskOpts || (c.magiskOpts = {});
@@ -789,6 +802,11 @@ function syncConfigureInputs() {
   $('#in-audio').checked = !!c.audio;
   $('#in-outdir').value = c.outputDir || '';
   $('#in-outname').value = c.outputName || 'bootanimation.zip';
+  // 帧命名
+  $('#in-prefix').value = c.framePrefix ?? 'frame_';
+  $('#in-pad').value = c.padWidth ?? 5;
+  $('#in-startnum').value = c.startNumber ?? 0;
+  updateNamingPreview();
   // 视频版参数
   $('#in-crf').value = c.crf;
   $('#crf-val').textContent = String(c.crf);
@@ -809,14 +827,8 @@ function syncConfigureInputs() {
   $('#in-magisk-path').value = mo.pathKey || 'system/media';
   $('#in-magisk-allpaths').checked = mo.allPaths !== false;
 
-  // 格式相关的可见性
-  const isVideo = c.format === 'video';
-  $$('.opt[data-format]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.format === c.format)));
-  if ($('#video-card')) $('#video-card').hidden = !isVideo;
-  if ($('#frame-opts')) $('#frame-opts').hidden = isVideo;
-  if ($('#compress-switch')) $('#compress-switch').hidden = isVideo;
-  if ($('#alpha-switch')) $('#alpha-switch').hidden = isVideo;
-  if ($('#jpeg-field')) $('#jpeg-field').hidden = isVideo || c.quality !== 'mjpeg';
+  // 格式相关的可见性（唯一入口）
+  applyFormatVisibility();
 
   $('#res-tag').textContent = `${Math.round(c.width)} × ${Math.round(c.height)}`;
   updateArHint();
@@ -830,6 +842,27 @@ function updateCrfLabel() {
   const text = v <= 16 ? '几乎无损' : v <= 21 ? '推荐' : v <= 25 ? '较省空间' : '明显压缩';
   const node = $('#crf-label');
   if (node) node.textContent = `· ${text}`;
+}
+
+/** 帧命名实时预览：告诉用户第一张和最后一张会叫什么 */
+function updateNamingPreview() {
+  const box = $('#naming-preview');
+  const tag = $('#naming-tag');
+  if (!box) return;
+  const p = namingPreview();
+  const pad = '0'.repeat(p.padWidth);
+  const style = `${p.prefix ? `前缀 “${p.prefix}” + ` : '纯数字 · '}${p.padWidth} 位补零 · 从 ${p.startNumber} 开始`;
+  if (tag) tag.textContent = `${p.prefix || '（无前缀）'}${pad}`;
+  if (!p.frames) {
+    box.textContent = `${style}　→　${p.sample}`;
+    return;
+  }
+  // 补零位数不够会导致撞名，这里提前标红
+  const need = String(p.startNumber + p.frames - 1).length;
+  const overflow = need > p.padWidth;
+  box.innerHTML = `${escapeHtml(style)}　→　首帧 <b class="mono">${escapeHtml(p.sample)}</b>` +
+    `，末帧 <b class="mono">${escapeHtml(p.last)}</b>（共 ${p.frames} 帧）` +
+    (overflow ? `　<span class="hint err">补零位数不足，编号会重复，请改成 ${need} 位以上</span>` : '');
 }
 
 function list0() {
@@ -975,6 +1008,31 @@ function bindConfigureInputs() {
   $('#in-outdir').onchange = (e) => { c.outputDir = e.target.value.trim(); saveState(); };
   $('#in-outname').onchange = (e) => { c.outputName = e.target.value.trim() || 'bootanimation.zip'; saveState(); };
 
+  /* --- 帧文件命名 --- */
+  const onNamingChange = () => {
+    c.framePrefix = $('#in-prefix').value;
+    c.padWidth = clamp(Math.round(Number($('#in-pad').value)) || 5, 1, 8);
+    c.startNumber = clamp(Math.round(Number($('#in-startnum').value)) || 0, 0, 10000000);
+    $('#in-pad').value = c.padWidth;
+    $('#in-startnum').value = c.startNumber;
+    updateNamingPreview();
+    computeValidation();
+    saveState();
+  };
+  $('#in-prefix').onchange = onNamingChange;
+  $('#in-pad').onchange = onNamingChange;
+  $('#in-startnum').onchange = onNamingChange;
+  $$('[data-naming]').forEach((chip) => {
+    chip.onclick = () => {
+      const [prefix, pad, start] = String(chip.dataset.naming).split('|');
+      $('#in-prefix').value = prefix;
+      $('#in-pad').value = pad;
+      $('#in-startnum').value = start;
+      onNamingChange();
+      toast(`已切换为 ${prefix || '纯数字'} + ${pad} 位补零，起于 ${start}`, 'ok');
+    };
+  });
+
   /* --- 视频版参数 --- */
   $('#in-crf').oninput = (e) => {
     c.crf = Number(e.target.value) || 20;
@@ -989,11 +1047,17 @@ function bindConfigureInputs() {
   /* --- Magisk 模块 --- */
   $('#in-magisk').onchange = (e) => {
     c.magisk = e.target.checked;
-    $('#magisk-opts').hidden = !c.magisk;
+    applyFormatVisibility();
+    // Magisk 模块与纯动画是两个不同的产物，默认文件名分开，避免互相覆盖
     const nameInput = $('#in-outname');
-    if (nameInput && ['bootanimation.zip', 'bootanimation-classic.zip', 'bootanimation-video.zip'].includes(nameInput.value.trim())) {
-      nameInput.value = c.magisk ? 'bootanimation-magisk.zip' : (c.format === 'video' ? 'bootanimation-video.zip' : 'bootanimation.zip');
-      c.outputName = nameInput.value;
+    if (nameInput) {
+      const cur = nameInput.value.trim();
+      const autos = ['bootanimation.zip', 'bootanimation-magisk.zip', 'bootanimation-video.zip', 'bootanimation-classic.zip'];
+      if (!cur || autos.includes(cur)) {
+        nameInput.value = c.magisk ? 'bootanimation-magisk.zip'
+          : (c.format === 'video' ? 'bootanimation-video.zip' : 'bootanimation.zip');
+        c.outputName = nameInput.value;
+      }
     }
     computeValidation();
     renderRail();
@@ -1360,6 +1424,10 @@ function renderExport() {
       host.appendChild(msgNode('note', `${p.dir}/ — ${p.frames} 个${c.quality === 'mjpeg' ? '.jpg' : '.png'} 帧` +
         (c.audio && state.info?.audio ? ' + audio.wav' : '')));
     }
+    const nm = namingPreview();
+    host.appendChild(msgNode('note',
+      `帧文件命名：${nm.prefix || '（无前缀）'}${'0'.repeat(nm.padWidth)} 起于 ${nm.startNumber}` +
+      `　首帧 ${nm.sample}${nm.frames > 1 ? ` → 末帧 ${nm.last}` : ''}`));
     host.appendChild(msgNode('note', `打包方式：${c.zipCompress ? 'DEFLATE 压缩' : 'STORE 不压缩（推荐，符合 zip -0 规范）'}`));
   }
   if (c.magisk) {
@@ -1454,6 +1522,9 @@ async function runConversion() {
     keepAlpha: c.format === 'video' ? false : !!c.keepAlpha,
     quality: c.quality,
     jpegQuality: Number(c.jpegQuality) || 4,
+    framePrefix: c.framePrefix ?? 'frame_',
+    padWidth: Number(c.padWidth) || 5,
+    startNumber: Number(c.startNumber) || 0,
     zipCompress: !!c.zipCompress,
     audio: !!c.audio,
     crf: Number(c.crf) || 20,

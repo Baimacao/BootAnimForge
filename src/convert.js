@@ -15,7 +15,7 @@ const fsp = require('fs/promises');
 const path = require('path');
 
 const ffs = require('./ffmpeg');
-const { buildDesc, buildPlan, validate, normalizePart } = require('./desc');
+const { buildDesc, buildPlan, validate, normalizePart, frameNumberOf } = require('./desc');
 const { createZipWriter, verifyZip, readZip } = require('./zip');
 const { buildMagiskModule } = require('./pack');
 const { uid, ensureDir, rmrf, num, int, fmtBytes } = require('./util');
@@ -35,21 +35,24 @@ const BASE = {
   verify: W.prepare + W.probe + W.plan + W.frames + W.desc + W.zip,
 };
 
-function frameFile(dir, pattern, n) {
-  return path.join(dir, pattern.replace(/%0?\d*d/, String(n).padStart(5, '0')));
-}
-
-/** 统计某目录下与 pattern 匹配的帧文件（按编号排序） */
+/**
+ * 列出目录里的帧文件，按「文件名里最后一段数字」升序排列。
+ *
+ * 不能用固定正则去匹配某一种命名：帧名可以是 frame_00001.png、001.png（手表常见）、
+ * 甚至 part0_1.jpg。这里统一用 frameNumberOf 取编号，与 zip 自检的顺序判定同一套规则。
+ */
 async function listFrames(dir) {
   let items;
   try { items = await fsp.readdir(dir, { withFileTypes: true }); } catch { return []; }
-  const files = items.filter((i) => i.isFile() && /^frame_\d+\.(png|jpg)$/i.test(i.name)).map((i) => i.name);
-  files.sort((a, b) => {
-    const na = Number((a.match(/(\d+)/) || [])[1] || 0);
-    const nb = Number((b.match(/(\d+)/) || [])[1] || 0);
-    return na - nb;
-  });
-  return files;
+  return items
+    .filter((i) => i.isFile() && /\.(png|jpe?g)$/i.test(i.name) && !/^audio\./i.test(i.name))
+    .map((i) => i.name)
+    .sort((a, b) => {
+      const na = frameNumberOf(a);
+      const nb = frameNumberOf(b);
+      if (na === null || nb === null) return a.localeCompare(b);
+      return na - nb;
+    });
 }
 
 /* ================================================================== */
@@ -70,7 +73,7 @@ async function buildClassicPayload(ctx) {
         input: req.input,
         outDir: dir,
         pattern: part.pattern,
-        startNumber: 0,
+        startNumber: plan.naming.startNumber,
         start: part.start,
         duration: part.end - part.start,
         fps: plan.fps,
@@ -116,9 +119,11 @@ async function buildClassicPayload(ctx) {
         if (!last) throw new Error(`第 ${part.index + 1} 段没有生成任何帧（区间可能超出视频长度）`);
         const buf = await fsp.readFile(path.join(dir, last));
         const extn = path.extname(last);
-        const base = Number((last.match(/(\d+)/) || [])[1] || 0);
-        for (let n = files.length; n < part.frames; n++) {
-          await fsp.writeFile(path.join(dir, `frame_${String(base + (n - files.length + 1)).padStart(5, '0')}${extn}`), buf);
+        // 补齐的帧要延续同一套命名规则（前缀 + 补零位数），不能写死 frame_%05d
+        const lastNo = frameNumberOf(last) ?? (plan.naming.startNumber + files.length - 1);
+        for (let n = 0; n < part.frames - files.length; n++) {
+          const name = `${plan.naming.prefix}${String(lastNo + n + 1).padStart(plan.naming.padWidth, '0')}${extn}`;
+          await fsp.writeFile(path.join(dir, name), buf);
         }
         onLog(`[${part.dir}] 缺 ${part.frames - files.length} 帧，已用末帧补齐`);
       }
@@ -377,6 +382,10 @@ async function run(req, hooks = {}) {
       fps: int(req.fps, 30),
       progress: !!req.progress,
       quality: req.quality || 'png',
+      // 帧命名（厂商差异大：frame_00001.png / 001.png / …）
+      framePrefix: req.framePrefix,
+      padWidth: req.padWidth,
+      startNumber: req.startNumber,
       parts: (req.parts || []).map(normalizePart),
     };
     const check = validate(cfg, info, { format });
@@ -578,6 +587,9 @@ async function analyze(req) {
     fps: int(req.fps, Math.round(info.video.fps) || 30),
     progress: !!req.progress,
     quality: req.quality || 'png',
+    framePrefix: req.framePrefix,
+    padWidth: req.padWidth,
+    startNumber: req.startNumber,
     parts: (req.parts || []).map(normalizePart),
   };
   const check = validate(cfg, info, { format: req.format });
