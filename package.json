@@ -1,19 +1,22 @@
 {
   "name": "bootanimforge",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "把 MP4 等视频转成安卓开机动画（bootanimation.zip）的 Windows 工具：Material Design 3 界面、零依赖 Node 引擎、支持 Android 12+ 视频版格式、Magisk 模块一键生成，且无需预装 Node",
+  "description": "把 MP4 等视频转成安卓开机动画（bootanimation.zip）：Windows 端负责生成（MD3 界面、零依赖 Node 引擎、Magisk 模块一键生成），安卓端负责刷入（Root/Magisk 安装、自动备份与还原、圆屏适配）",
   "main": "src/main.js",
   "scripts": {
     "start": "node src/main.js",
     "dev": "node src/main.js --no-open",
     "fetch-ffmpeg": "node tools/fetch-ffmpeg.js",
     "selftest": "node tools/selftest.js",
-    "make-portable": "node tools/make-portable.js"
+    "make-portable": "node tools/make-portable.js",
+    "android:build": "node tools/build-android.js",
+    "android:verify": "node tools/verify-android.js",
+    "android:coretest": "node tools/coretest-android.js"
   },
   "engines": {
     "node": ">=18"
   },
-  "keywords": ["android", "bootanimation", "ffmpeg", "mp4", "material-design-3", "magisk", "wear-os"],
+  "keywords": ["android", "bootanimation", "ffmpeg", "mp4", "material-design-3", "magisk", "wear-os", "root"],
   "license": "MIT"
 }

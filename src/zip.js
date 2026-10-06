@@ -69,13 +69,14 @@ function createZipWriter(opts) {
    * @param {string} name
    * @param {Buffer|string} content
    */
-  function add(name, content) {
+  function add(name, content, opts = {}) {
     const raw = Buffer.isBuffer(content) ? content : Buffer.from(String(content), 'utf8');
     const nameBuf = Buffer.from(name.replace(/\\/g, '/'), 'utf8');
     const crc = crc32(raw);
     let stored = raw;
     let method = 0;
-    if (compress && raw.length > 0) {
+    // store=true 时强制不压缩：APK 里的 classes.dex 建议以 STORE 存放
+    if (compress && !opts.store && raw.length > 0) {
       const deflated = zlib.deflateRawSync(raw, { level: 6 });
       if (deflated.length < raw.length) { stored = deflated; method = 8; }
     }

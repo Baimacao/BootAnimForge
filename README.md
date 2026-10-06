@@ -2,6 +2,9 @@
 
 把 MP4 等视频转成安卓开机动画（`bootanimation.zip`）的 Windows 工具，并可直接产出**可刷入的 Magisk 模块**。
 
+**附带安卓端 App**：负责把动画**装进设备** —— 自动找路径、设权限、备份与还原、圆屏适配。
+PC 端负责生成，手机/手表端负责刷入。
+
 界面是 Material Design 3 风格，带非线性动效（MD3 emphasized 曲线、shared-axis X 转场）、实时预览、时间轴分段编辑器和内置教程。
 引擎是本地 ffmpeg，界面在独立的 Edge 应用窗口里运行 —— 不依赖 Electron，改代码不用编译。
 
@@ -11,7 +14,19 @@
 
 ---
 
-## 快速开始
+## 两个端的分工
+
+| | PC 端（Windows） | 安卓端（本仓库 `android/`） |
+|---|---|---|
+| 职责 | **生成** bootanimation.zip / Magisk 模块 | **刷入**：安装、备份、还原 |
+| 为什么这样分 | 有 ffmpeg、有算力、界面好操作 | 它就装在目标设备上，最清楚"文件该放哪" |
+| 形态 | 双击 `启动.cmd`，独立应用窗口 | APK，minSdk 19 / 圆屏适配 |
+
+安卓端的详细说明见 **[docs/android.md](docs/android.md)**。
+
+---
+
+## 快速开始（PC 端）
 
 双击 **`启动.cmd`**（文件名是中文，但文件内容刻意只写 ASCII —— 原因见下）。
 
@@ -186,18 +201,30 @@ BootAnimForge/
 │   ├── index.html
 │   ├── css/app.css           MD3 设计令牌 + 组件 + 动效
 │   └── js/{app,core,data}.js 交互 / 状态与 API / 预设与文案
+├── android/                  安卓端 App（Java 8 / minSdk 19 / 无 androidx）
+│   ├── AndroidManifest.xml
+│   ├── res/                  MD3 色板、主题、图标
+│   └── src/com/baimacao/bootanimforge/
+│       ├── MainActivity.java   界面、选包、安装流程、圆屏设置
+│       ├── RootShell.java      su 执行、权限与 SELinux 上下文
+│       ├── BootScanner.java    扫描所有候选路径 + Magisk 模块检测
+│       ├── BootCore.java       包解析与校验（纯 JDK，可在 PC 上测）
+│       ├── BackupManager.java  自动备份 + 一键还原
+│       └── ScreenShape.java    圆屏判断与安全区
 ├── tools/
 │   ├── fetch-node.ps1        获取便携 Node 运行时（首次运行自动调用）
 │   ├── fetch-ffmpeg.js       获取 ffmpeg 运行时（多源回退）
 │   ├── selftest.js           后端端到端自检（合成素材，94 项断言）
 │   ├── uicheck.js            无头 Edge + CDP 检查前端与整条流程（47 项断言）
+│   ├── build-android.js      构建安卓 APK（aapt2/javac/d8/zipalign/apksigner）
+│   ├── verify-android.js     APK 静态验证（43 项断言）
+│   ├── coretest-android.js   在 PC 上跑安卓端解析逻辑（31 项断言）
 │   ├── server-ctl.js         开发用启停
 │   ├── make-portable.js      打便携包（含 Node + ffmpeg）
 │   ├── publish.js            发布到 GitHub（纯 REST API）
-│   ├── release.js            打 tag / 建 Release / 传资产
-│   └── gh.js                 凭据解析与 GitHub API 封装
+│   └── release.js            打 tag / 建 Release / 传资产
 ├── runtime/                  node.exe / ffmpeg.exe / ffprobe.exe（自动下载，不入库）
-├── docs/                     规范说明、截图
+├── docs/                     规范说明、安卓端说明、截图
 └── output/                   默认输出目录
 ```
 
@@ -220,6 +247,7 @@ BootAnimForge/
 ## 自检与验证
 
 ```bash
+# PC 端
 node tools/fetch-node.ps1          # 准备便携 Node 运行时（无前置安装用）
 node tools/fetch-ffmpeg.js         # 准备 ffmpeg 引擎
 node tools/selftest.js             # 后端端到端：94 项断言
@@ -227,7 +255,12 @@ node tools/server-ctl.js start     # 起服务
 node tools/uicheck.js --flow       # 无头浏览器跑完整流程：47 项断言
 node tools/uicheck.js --anim       # 动效验证：14 项断言（MD3 运动系统）
 node tools/uicheck.js --docshot    # 重新生成 docs/ 下的截图
-node tools/make-portable.js 1.1.0  # 打便携包（含 Node + ffmpeg，解压即用）
+node tools/make-portable.js 1.2.0  # 打便携包（含 Node + ffmpeg，解压即用）
+
+# 安卓端（不需要 Gradle / AGP）
+node tools/build-android.js        # 构建 APK → dist/android/
+node tools/verify-android.js       # APK 静态验证：43 项断言
+node tools/coretest-android.js     # 在 PC 上真跑安卓端的包解析逻辑：31 项断言
 ```
 
 `selftest.js` 会用 ffmpeg 合成测试素材（横屏、旋转、带 alpha），覆盖：

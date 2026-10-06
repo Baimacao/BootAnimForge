@@ -19,7 +19,7 @@ const VERSION = process.argv[2] || require('../package.json').version;
 const DIST = path.join(ROOT, 'dist');
 
 /** 需要进便携版的目录与文件 */
-const INCLUDE_DIRS = ['src', 'public', 'tools', 'docs'];
+const INCLUDE_DIRS = ['src', 'public', 'tools', 'docs', 'android'];
 const INCLUDE_ROOT = ['README.md', 'LICENSE', 'package.json', '启动.cmd'];
 const EXCLUDE = new Set(['node_modules', '.work', 'output', 'dist', 'config', '.git']);
 const EXCLUDE_FILES = new Set(['gh-probe.js', 'publish.js']);   // 发布脚本对用户无用
@@ -43,6 +43,16 @@ async function collect() {
   }
   for (const d of INCLUDE_DIRS) await walk(path.join(ROOT, d), d);
 
+  // 安卓端 APK：一起塞进便携版，用户拿到就能两边用
+  const apkDir = path.join(ROOT, 'dist', 'android');
+  if (fs.existsSync(apkDir)) {
+    const apks = fs.readdirSync(apkDir).filter((f) => f.endsWith('.apk'))
+      .map((f) => ({ f, t: fs.statSync(path.join(apkDir, f)).mtimeMs }))
+      .sort((a, b) => b.t - a.t);
+    if (apks.length) {
+      files.push({ abs: path.join(apkDir, apks[0].f), zip: `android-apk/${apks[0].f}` });
+    }
+  }
   // 引擎 + Node 运行时：便携版的目标是「解压即用、无任何前置」
   for (const exe of ['ffmpeg.exe', 'ffprobe.exe', 'node.exe']) {
     const p = path.join(ROOT, 'runtime', exe);
