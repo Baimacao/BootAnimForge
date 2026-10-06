@@ -27,10 +27,10 @@ const BRANCH = argOf('--branch', 'main');
 const DESCRIPTION = '把 MP4 等视频转成安卓开机动画（bootanimation.zip）的 Windows 工具：Material Design 3 界面、零依赖 Node 引擎、支持 Android 12+ 视频版格式与 Magisk 模块一键生成';
 
 /* 要发布的文件：显式白名单，比"排除法"安全（不会误传 runtime/、output/、.work/） */
-const INCLUDE_DIRS = ['src', 'public', 'tools', 'docs'];
+const INCLUDE_DIRS = ['src', 'public', 'tools', 'docs', 'android'];
 const INCLUDE_ROOT = ['README.md', 'LICENSE', '.gitignore', 'package.json', '启动.cmd'];
 /** 二进制/大文件：走 blob API（base64），其余走文本 blob */
-const BINARY_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.zip', '.exe']);
+const BINARY_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.zip', '.exe', '.apk', '.jks', '.keystore']);
 
 async function collect() {
   const files = [];
@@ -44,9 +44,11 @@ async function collect() {
     for (const it of items) {
       const p = path.join(dir, it.name);
       if (it.isDirectory()) {
-        if (['node_modules', '.work', 'output', 'runtime', '.git'].includes(it.name)) continue;
+        if (['node_modules', '.work', 'output', 'runtime', '.git', 'build', 'dist'].includes(it.name)) continue;
         await walk(p);
       } else if (it.isFile()) {
+        // 本地构建产物与签名密钥不进仓库
+        if (/\.(apk|jks|keystore)$/i.test(it.name)) continue;
         files.push(p);
       }
     }

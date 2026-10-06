@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      主题：深色、无 ActionBar（自己画顶栏，方便圆屏适配）。
+      windowIsRound / windowNoTitle 等属性在旧版本上会被忽略，不影响安装。
+    -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">@color/md_primary</item>
+        <item name="android:colorPrimaryDark">@color/md_surface</item>
+        <item name="android:colorAccent">@color/md_primary</item>
+        <item name="android:windowBackground">@color/md_surface</item>
+        <item name="android:textColorPrimary">@color/md_on_surface</item>
+        <item name="android:textColorSecondary">@color/md_on_surface_variant</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:statusBarColor">@color/md_surface</item>
+        <item name="android:navigationBarColor">@color/md_surface</item>
+    </style>
+
+    <!--
+      圆屏说明：没有 android:windowIsRound 这个主题属性（那是错的写法，会导致 aapt2 链接失败）。
+      圆屏只能运行时判断：Configuration.isScreenRound()（API 23+），旧版本回退到
+      UiModeManager.getCurrentModeType() == UI_MODE_TYPE_WATCH。
+      判断结果由 ScreenShape 统一处理，用户还能在设置里手动覆盖。
+    -->
+</resources>
