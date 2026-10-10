@@ -123,6 +123,7 @@ function dexContains(buf, s) {
     'Lcom/baimacao/bootanimforge/VideoProbe;',
     'Lcom/baimacao/bootanimforge/AnimTarget;',
     'Lcom/baimacao/bootanimforge/FramePreview;',
+    'Lcom/baimacao/bootanimforge/Palette;',
   ];
   for (const c of classNames) ok('包含类 ' + c.replace(/^L|;$/g, '').split('/').pop(), dexContains(dex, c));
 
@@ -164,6 +165,29 @@ function dexContains(buf, s) {
     ['已取消', '取消提示'],
   ];
   for (const [s, what] of must) ok(`含「${s}」（${what}）`, dexContains(dex, s));
+
+  /* ---------- 4b. 瑞士风色板（防止被改回 MD3） ---------- */
+  section('4b. 瑞士国际主义色板（三色）');
+  // Palette 里的常量是 static final int，会被 javac 内联成字面量，
+  // 因此 DEX 里搜不到常量名，但字符串形态的类名与资源值可验。
+  ok('Palette 类已编入', dexContains(dex, 'Lcom/baimacao/bootanimforge/Palette;'));
+  // 三色基色在 DEX 中以整型字面量存在，用十六进制串不可靠 —— 改验源码侧一致性
+  const paletteSrc = fs.readFileSync(path.join(ROOT, 'android', 'src', 'com', 'baimacao', 'bootanimforge', 'Palette.java'), 'utf8');
+  ok('Palette 定义强调红 #DA291C', /0xFFDA291C/.test(paletteSrc), '未找到 0xFFDA291C');
+  ok('Palette 定义米白 #F5F2ED', /0xFFF5F2ED/.test(paletteSrc), '未找到 0xFFF5F2ED');
+  ok('Palette 定义黑 #1A1A1A', /0xFF1A1A1A/.test(paletteSrc), '未找到 0xFF1A1A1A');
+  ok('Palette 圆角为 0（瑞士风直角）', /static final int RADIUS = 0;/.test(paletteSrc), 'RADIUS 不为 0');
+  // 两个 Activity 不应再各自硬编码 MD3 色值（应指向 Palette）
+  for (const f of ['MainActivity.java', 'CreatorActivity.java']) {
+    const src = fs.readFileSync(path.join(ROOT, 'android', 'src', 'com', 'baimacao', 'bootanimforge', f), 'utf8');
+    ok(f + ' 不再硬编码 MD3 主色', !/0xFF4FC3F7/.test(src), '仍存在 #4FC3F7');
+    ok(f + ' 色值已指向 Palette', /Palette\.PRIMARY/.test(src), '未引用 Palette');
+  }
+  // XML 色板同步（否则启动瞬间会闪深色背景）
+  const colorsXml = fs.readFileSync(path.join(ROOT, 'android', 'res', 'values', 'colors.xml'), 'utf8');
+  ok('colors.xml 主色为强调红', /md_primary">#DA291C/.test(colorsXml), '未同步');
+  ok('colors.xml 表面为米白', /md_surface">#F5F2ED/.test(colorsXml), '未同步');
+  ok('colors.xml 已无 MD3 深色残留', !/#0E1418|#4FC3F7/.test(colorsXml), '仍含 MD3 深色值');
 
   section('5. 兼容性写法');
   ok('用了 isScreenRound（API 23+ 特性检测）', dexContains(dex, 'isScreenRound'));

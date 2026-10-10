@@ -28,6 +28,217 @@ const JAVA_HOME = process.env.JAVA_HOME || 'E:\\Program Files\\Java\\jdk-21.0.10
 const SRC_DIR = path.join(ROOT, 'android', 'src', 'com', 'baimacao', 'bootanimforge');
 const ffs = require('../src/ffmpeg.js');
 
+/**
+ * 测试装置：在 PC 上驱动安卓端「制作」核心的纯 JDK 类。
+ * 内联在此，不依赖 .work（临时目录会被清理）。
+ */
+const CREATOR_TEST_JAVA = `
+import com.baimacao.bootanimforge.Creator;
+import com.baimacao.bootanimforge.PngEncoder;
+import com.baimacao.bootanimforge.ZipStoreWriter;
+import java.io.File;
+
+public class CreatorTest {
+    static int W = 64, H = 64;
+
+    /** 造一帧：左半边红、右半边蓝，便于判断是否被拉伸/裁切 */
+    static int[] testFrame(int w, int h) {
+        int[] px = new int[w * h];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                px[y * w + x] = (x < w / 2) ? 0xFFFF0000 : 0xFF0000FF;
+        return px;
+    }
+
+    /** 4 个角 + 中心取色，导给 JS 侧判断留边与内容 */
+    static int[] corners(int[] px, int w, int h) {
+        return new int[] {
+            px[0], px[w - 1], px[(h - 1) * w], px[(h - 1) * w + w - 1], px[(h / 2) * w + w / 2]
+        };
+    }
+
+    public static void main(String[] args) throws Exception {
+        File outDir = new File(args[0]);
+        outDir.mkdirs();
+
+        /* ---- 1. PNG 编码器：红底 + 绿块 + 四角蓝，供 ffmpeg 逐像素核对 ---- */
+        int[] px = new int[W * H];
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                int c = 0xFFCC2222;
+                if (x >= 16 && x < 48 && y >= 16 && y < 48) c = 0xFF22CC44;
+                if ((x < 8 || x >= W - 8) && (y < 8 || y >= H - 8)) c = 0xFF2244CC;
+                px[y * W + x] = c;
+            }
+        }
+        write(new File(outDir, "enc-rgb.png"), PngEncoder.encode(px, W, H, true));
+        write(new File(outDir, "enc-rgba.png"), PngEncoder.encode(px, W, H, false));
+
+        /* ---- 2. 等比缩放 + 留边（源 200x100 → 目标 100x100 应缩为 100x50 并上下留黑） ---- */
+        int srcW = 200, srcH = 100;
+        int[] src = testFrame(srcW, srcH);
+        int[] fitted = Creator.fitAndPad(src, srcW, srcH, 100, 100, 0xFF000000);
+        write(new File(outDir, "fit.bin"), intsToBytes(corners(fitted, 100, 100)));
+        write(new File(outDir, "fit.png"), PngEncoder.encode(fitted, 100, 100, true));
+
+        /* ---- 3. STORE zip 写入器 ---- */
+        ZipStoreWriter zip = new ZipStoreWriter(new File(outDir, "made.zip"));
+        zip.add("desc.txt", "480 480 15\\r\\np 0 0 part0\\r\\n".getBytes("UTF-8"));
+        for (int i = 0; i < 5; i++)
+            zip.add("part0/" + pad(i + 1, 3) + ".png", PngEncoder.encode(testFrame(32, 32), 32, 32, true));
+        zip.finish();
+
+        /* ---- 4. 帧命名 ---- */
+        Creator.Options o = new Creator.Options();
+        o.framePrefix = ""; o.padWidth = 3; o.startNumber = 1;
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < 3; i++) names.append(Creator.frameName(o, i)).append(',');
+        Creator.Options o2 = new Creator.Options();
+        o2.framePrefix = "frame_"; o2.padWidth = 5; o2.startNumber = 0;
+        names.append(Creator.frameName(o2, 7));
+
+        /* ---- 5. plan / desc（开机） ---- */
+        Creator.Options o3 = new Creator.Options();
+        o3.width = 480; o3.height = 480; o3.fps = 15;
+        java.util.List<Creator.Part> parts = new java.util.ArrayList<Creator.Part>();
+        parts.add(new Creator.Part("part0", 0, 1, 15, 0));
+        String desc = Creator.buildDesc(o3, parts);
+
+        /* ---- 6. 关机动画：文件名与段类型 ---- */
+        System.out.println("BOOTFILE\\t" + Creator.targetFileName(Creator.TARGET_BOOT));
+        System.out.println("SHUTFILE\\t" + Creator.targetFileName(Creator.TARGET_SHUTDOWN));
+        System.out.println("BOOTVIDEO\\t" + Creator.targetVideoFileName(Creator.TARGET_BOOT));
+        System.out.println("SHUTVIDEO\\t" + Creator.targetVideoFileName(Creator.TARGET_SHUTDOWN));
+        System.out.println("BOOTLABEL\\t" + Creator.targetLabel(Creator.TARGET_BOOT));
+        System.out.println("SHUTLABEL\\t" + Creator.targetLabel(Creator.TARGET_SHUTDOWN));
+
+        Creator.Options os = new Creator.Options();
+        os.width = 480; os.height = 480; os.fps = 15; os.partType = 'c';
+        System.out.println("DESCSHUT\\t" + Creator.buildDesc(os, parts).replace("\\r\\n", "\\\\r\\\\n"));
+
+        Creator.Options od = new Creator.Options();
+        od.width = 480; od.height = 480; od.fps = 15; od.partType = 'f';
+        System.out.println("DESCEXPLICIT\\t" + Creator.buildDesc(od, parts).replace("\\r\\n", "\\\\r\\\\n"));
+
+        // 段自身携带类型时应优先于 cfg.partType
+        java.util.List<Creator.Part> typed = new java.util.ArrayList<Creator.Part>();
+        typed.add(new Creator.Part("part0", 0, 1, 15, 0));
+        typed.get(0).type = 'p';
+        Creator.Options op = new Creator.Options();
+        op.width = 480; op.height = 480; op.fps = 15; op.partType = 'c';
+        System.out.println("DESCTYPE\\t" + Creator.buildDesc(op, typed).replace("\\r\\n", "\\\\r\\\\n"));
+
+        /* ---- 7. 取用区间 ---- */
+        final double fakeDur = 10.0;
+        Creator.FrameSource fs = new Creator.FrameSource() {
+            public int displayWidth() { return 64; }
+            public int displayHeight() { return 64; }
+            public double durationSec() { return fakeDur; }
+            public double fps() { return 30; }
+            public int[] frameAt(double sec) { return testFrame(64, 64); }
+            public void close() { }
+        };
+        Creator.Options ot = new Creator.Options();
+        ot.fps = 10; ot.startSec = 1.0; ot.endSec = 2.0;
+        java.util.List<Creator.Part> trimPlan = Creator.plan(ot, fs);
+        System.out.println("TRIMSTART\\t" + trimPlan.get(0).start);
+        System.out.println("TRIMEND\\t" + trimPlan.get(0).end);
+        System.out.println("TRIMFRAMES\\t" + trimPlan.get(0).frames);
+
+        Creator.Options oclip = new Creator.Options();
+        oclip.fps = 10; oclip.startSec = 2.0; oclip.endSec = 99.0;
+        System.out.println("CLIPEND\\t" + Creator.plan(oclip, fs).get(0).end);
+
+        /* ---- 8. 真跑一次转换（含取用区间），验证产物 ---- */
+        Creator.Options run = new Creator.Options();
+        run.target = Creator.TARGET_SHUTDOWN;
+        run.width = 64; run.height = 64; run.fps = 10;
+        run.startSec = 1.0; run.endSec = 2.0;
+        run.partType = 'c'; run.padWidth = 3; run.startNumber = 1;
+        final int[] counter = new int[1];
+        Creator.FrameSource counting = new Creator.FrameSource() {
+            public int displayWidth() { return 64; }
+            public int displayHeight() { return 64; }
+            public double durationSec() { return fakeDur; }
+            public double fps() { return 30; }
+            public int[] frameAt(double sec) { counter[0]++; return testFrame(64, 64); }
+            public void close() { }
+        };
+        File made = new File(outDir, "made-shutdown.zip");
+        Creator.Result rr = Creator.convert(run, counting, made, null);
+        System.out.println("RUNFRAMES\\t" + rr.totalFrames);
+        System.out.println("RUNTAKEN\\t" + counter[0]);
+        System.out.println("RUNNAME\\t" + made.getName());
+        System.out.println("RUNBYTES\\t" + rr.bytes);
+
+        /* ---- 9. 取消：进度回调返回 false 应中断并删除半成品 ---- */
+        Creator.Options oc = new Creator.Options();
+        oc.width = 64; oc.height = 64; oc.fps = 10; oc.startSec = 0; oc.endSec = 5;
+        File cancelFile = new File(outDir, "made-cancel.zip");
+        String cancelErr = null;
+        try {
+            Creator.convert(oc, counting, cancelFile, new Creator.Progress() {
+                public boolean onProgress(double ratio, String note) { return ratio < 0.3; }
+            });
+        } catch (Throwable t) {
+            cancelErr = t.getClass().getSimpleName();
+        }
+        System.out.println("CANCELERR\\t" + cancelErr);
+        System.out.println("CANCELFILEEXISTS\\t" + cancelFile.exists());
+
+        System.out.println("NAMES\\t" + names);
+        System.out.println("DESC\\t" + desc.replace("\\r\\n", "\\\\r\\\\n"));
+        System.out.println("DONE");
+    }
+
+    static String pad(int n, int w) {
+        StringBuilder sb = new StringBuilder(Integer.toString(n));
+        while (sb.length() < w) sb.insert(0, '0');
+        return sb.toString();
+    }
+
+    static byte[] intsToBytes(int[] v) {
+        byte[] b = new byte[v.length * 4];
+        for (int i = 0; i < v.length; i++) {
+            b[i * 4] = (byte) ((v[i] >>> 24) & 0xFF);
+            b[i * 4 + 1] = (byte) ((v[i] >>> 16) & 0xFF);
+            b[i * 4 + 2] = (byte) ((v[i] >>> 8) & 0xFF);
+            b[i * 4 + 3] = (byte) (v[i] & 0xFF);
+        }
+        return b;
+    }
+
+    static void write(File f, byte[] data) throws Exception {
+        java.io.FileOutputStream os = new java.io.FileOutputStream(f);
+        os.write(data);
+        os.close();
+    }
+}
+`;
+
+/** BootCore 校验入口，用于反向复核产物 */
+const CORE_TEST_JAVA = `
+import com.baimacao.bootanimforge.BootCore;
+import java.io.File;
+
+public class CoreTest {
+    public static void main(String[] args) throws Exception {
+        for (String a : args) {
+            BootCore.Report r = BootCore.validate(new File(a));
+            System.out.println("KIND\\t" + r.kind);
+            System.out.println("VALID\\t" + r.valid);
+            System.out.println("SIZE\\t" + r.width + "x" + r.height);
+            System.out.println("FPS\\t" + r.fps);
+            System.out.println("FRAMES\\t" + r.totalFrames);
+            System.out.println("MOOVFIRST\\t" + r.moovFirst);
+            for (String e : r.errors) System.out.println("ERR\\t" + e);
+            for (String w : r.warnings) System.out.println("WARN\\t" + w);
+        }
+    }
+}
+`;
+
+
 let pass = 0, fail = 0;
 const lines = [];
 function ok(name, cond, detail = '') {
@@ -77,32 +288,17 @@ async function probeSize(file) {
   await fsp.mkdir(classes, { recursive: true });
   const sources = ['Creator.java', 'PngEncoder.java', 'ZipStoreWriter.java', 'BootCore.java']
     .map((f) => path.join(SRC_DIR, f));
-  // CoreTest 用来在本轮里顺便用 BootCore 复核产物，需要一起编译
-  const coreTest = path.join(ROOT, '.work', 'android-coretest', 'CoreTest.java');
+
+  // 测试装置内联在本脚本中（与 coretest-android.js 同一模式），不依赖 .work 下的临时文件。
+  // 为什么必须内联：.work 是临时目录、会被清理规则反复删除，而这两个测试类是**手写资产**。
+  // 原实现从 .work/android-creatortest/CreatorTest.java 读取，该目录一被清理测试就整体失效（已踩过）。
+  const creatorTest = path.join(WORK, 'CreatorTest.java');
+  await fsp.writeFile(creatorTest, CREATOR_TEST_JAVA, 'utf8');
   const coreTestLocal = path.join(WORK, 'CoreTest.java');
-  if (fs.existsSync(coreTest)) {
-    await fsp.copyFile(coreTest, coreTestLocal);
-  } else {
-    await fsp.writeFile(coreTestLocal, `
-import com.baimacao.bootanimforge.BootCore;
-import java.io.File;
-public class CoreTest {
-    public static void main(String[] args) throws Exception {
-        for (String a : args) {
-            BootCore.Report r = BootCore.validate(new File(a));
-            System.out.println("KIND\\t" + r.kind);
-            System.out.println("VALID\\t" + r.valid);
-            System.out.println("SIZE\\t" + r.width + "x" + r.height);
-            System.out.println("FPS\\t" + r.fps);
-            System.out.println("FRAMES\\t" + r.totalFrames);
-            for (String e : r.errors) System.out.println("ERR\\t" + e);
-        }
-    }
-}
-`, 'utf8');
-  }
+  await fsp.writeFile(coreTestLocal, CORE_TEST_JAVA, 'utf8');
+
   await run(path.join(JAVA_HOME, 'bin', 'javac.exe'),
-    ['-encoding', 'UTF-8', '-d', classes, ...sources, path.join(WORK, 'CreatorTest.java'), coreTestLocal], WORK);
+    ['-encoding', 'UTF-8', '-d', classes, ...sources, creatorTest, coreTestLocal], WORK);
   console.log('已编译 Creator / PngEncoder / ZipStoreWriter / BootCore（安卓端"制作"的纯逻辑部分）\n');
 
   /* ---------- 运行 ---------- */

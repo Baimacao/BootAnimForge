@@ -562,11 +562,18 @@ class CDP {
 
       // 设计令牌确实定义了 MD3 强调曲线
       const easeVal = await evalJs(`getComputedStyle(document.documentElement).getPropertyValue('--ease-emphasized').trim()`);
-      const easeOk = /cubic-bezier\(\s*\.?0?\.?2\s*,\s*0\s*,\s*0\s*,\s*1\s*\)/.test(easeVal);
-      console.log(`  ${easeOk ? '✓' : '✗'} emphasized 曲线令牌存在 → ${JSON.stringify(easeVal)}`);
-      if (!easeOk) errors.push('--ease-emphasized 不是预期的 cubic-bezier(.2,0,0,1)');
-      await anim('动效时长令牌存在（medium4=400ms）',
-        `getComputedStyle(document.documentElement).getPropertyValue('--dur-medium4').trim()`, '400ms');
+      // v2（瑞士风）运动系统分两条曲线，各司其职：
+      //   --ease-elastic     弹性缓动，只用于形变（overshoot 提供重量感）
+      //   --ease-emphasized  MD3 强调减速，用于颜色/透明度与视图转场（无 overshoot）
+      const elasticVal = await evalJs(`getComputedStyle(document.documentElement).getPropertyValue('--ease-elastic').trim()`);
+      const elasticOk = /cubic-bezier\(\s*\.?0?\.?34\s*,\s*1\.56\s*,\s*\.?0?\.?64\s*,\s*1\s*\)/.test(elasticVal);
+      console.log(`  ${elasticOk ? '✓' : '✗'} --ease-elastic 弹性曲线 → ${JSON.stringify(elasticVal)}`);
+      if (!elasticOk) errors.push('--ease-elastic 不是 cubic-bezier(.34,1.56,.64,1)，实际 ' + elasticVal);
+      const emphOk = /cubic-bezier\(\s*\.?0?\.?2\s*,\s*0\s*,\s*0\s*,\s*1\s*\)/.test(easeVal);
+      console.log(`  ${emphOk ? '✓' : '✗'} --ease-emphasized 减速曲线 → ${JSON.stringify(easeVal)}`);
+      if (!emphOk) errors.push('--ease-emphasized 不是 cubic-bezier(.2,0,0,1)，实际 ' + easeVal);
+      await anim('动效时长令牌存在（medium4=320ms，对应规范 --dur-panel）',
+        `getComputedStyle(document.documentElement).getPropertyValue('--dur-medium4').trim()`, '320ms');
 
       // 前进方向：新视图应带 enter-forward，且过渡确实在跑
       // goStep(2/3) 需要已载入视频（否则按设计直接返回），所以先放一个测试视频进去。
@@ -598,7 +605,7 @@ class CDP {
       const fwdOk = /enter-forward/.test(forward.cls) && forward.anim === 'shared-x-in-forward';
       console.log(`  ${fwdOk ? '✓' : '✗'} 前进时应用 shared-axis 入场动画`);
       if (!fwdOk) errors.push(`前进转场动画未应用（class="${forward.cls}" anim=${forward.anim}）`);
-      const fwdDur = await anim('入场动画时长为 0.4s（MD3 medium4）', `getComputedStyle(document.querySelector('#view-configure')).animationDuration`, '0.4s');
+      const fwdDur = await anim('入场动画时长为 0.32s（--dur-medium4 = 规范 --dur-panel）', `getComputedStyle(document.querySelector('#view-configure')).animationDuration`, '0.32s');
 
       // 关键帧本身必须是从右侧（正 translateX）滑入；直接读 CSSOM，避免采样时机带来的抖动
       const kf = await evalJs(`(() => {

@@ -1,51 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-      Material Design 3 令牌（深色）。
-      为什么不用 Material Components 库：本机 Maven 仓库不可达，拿不到 androidx。
-      所以这里把 MD3 的色板与形状写成普通资源，用 framework 控件自己实现。
-      设计令牌与 PC 端 public/css/app.css 保持一致，两端观感统一。
+      瑞士国际主义风格色板（与 PC 端 public/css/app.css 的令牌一一对应，两端观感统一）。
+
+      为什么不用 Material Components 库：本机 Maven 仓库不可达，拿不到 androidx，
+      所以这里把色板写成普通资源，由 framework 控件自己实现。
+
+      只保留 styles.xml 实际引用的 4 个颜色。
+      原先的 md_space_*（6 个）、md_shape_*（4 个）、md_ripple 在整个工程里零引用，已删除；
+      间距与圆角由 Java 侧的 Palette / dp() 统一控制（实测 Java 不引用任何 R.color / R.dimen）。
     -->
-    <color name="md_primary">#4FC3F7</color>
-    <color name="md_on_primary">#00344A</color>
-    <color name="md_primary_container">#004C69</color>
-    <color name="md_on_primary_container">#C8E7FF</color>
-
-    <color name="md_secondary_container">#374954</color>
-    <color name="md_on_secondary_container">#D2E6F3</color>
-
-    <color name="md_error">#FFB4AB</color>
-    <color name="md_error_container">#93000A</color>
-    <color name="md_on_error_container">#FFDAD6</color>
-
-    <color name="md_success">#7BD88F</color>
-    <color name="md_success_container">#1E4D2B</color>
-    <color name="md_on_success_container">#C6F0D0</color>
-    <color name="md_warning">#FFD48A</color>
-    <color name="md_warning_container">#5C4413</color>
-
-    <color name="md_surface">#0E1418</color>
-    <color name="md_surface_container_lowest">#0A0F12</color>
-    <color name="md_surface_container_low">#141A1F</color>
-    <color name="md_surface_container">#1A2126</color>
-    <color name="md_surface_container_high">#242C32</color>
-    <color name="md_surface_container_highest">#2E373D</color>
-    <color name="md_on_surface">#DFE3E6</color>
-    <color name="md_on_surface_variant">#BFC8CE</color>
-    <color name="md_outline">#899298</color>
-    <color name="md_outline_variant">#3F484E</color>
-
-    <dimen name="md_space_1">4dp</dimen>
-    <dimen name="md_space_2">8dp</dimen>
-    <dimen name="md_space_3">12dp</dimen>
-    <dimen name="md_space_4">16dp</dimen>
-    <dimen name="md_space_5">20dp</dimen>
-    <dimen name="md_space_6">24dp</dimen>
-
-    <dimen name="md_shape_s">8dp</dimen>
-    <dimen name="md_shape_m">12dp</dimen>
-    <dimen name="md_shape_l">16dp</dimen>
-    <dimen name="md_shape_xl">28dp</dimen>
-
-    <color name="md_ripple">#33FFFFFF</color>
+    <color name="md_primary">#DA291C</color>
+    <color name="md_surface">#F5F2ED</color>
+    <color name="md_on_surface">#1A1A1A</color>
+    <color name="md_on_surface_variant">#B81A1A1A</color>
 </resources>

@@ -44,21 +44,21 @@ import java.util.Locale;
 public class CreatorActivity extends Activity {
 
     /* 与 MainActivity 共用一套 MD3 令牌 */
-    private static final int C_PRIMARY = 0xFF4FC3F7;
-    private static final int C_ON_PRIMARY = 0xFF00344A;
-    private static final int C_PRIMARY_CONT = 0xFF004C69;
-    private static final int C_ON_PRIMARY_CONT = 0xFFC8E7FF;
-    private static final int C_SURFACE = 0xFF0E1418;
-    private static final int C_SURF_LOW = 0xFF141A1F;
-    private static final int C_SURF_HIGH = 0xFF242C32;
-    private static final int C_ON_SURFACE = 0xFFDFE3E6;
-    private static final int C_ON_SURF_VAR = 0xFFBFC8CE;
-    private static final int C_OUTLINE = 0xFF3F484E;
-    private static final int C_ERROR_CONT = 0xFF93000A;
-    private static final int C_ON_ERROR_CONT = 0xFFFFDAD6;
-    private static final int C_SUCCESS_CONT = 0xFF1E4D2B;
-    private static final int C_ON_SUCCESS_CONT = 0xFFC6F0D0;
-    private static final int C_WARN = 0xFFFFD48A;
+    private static final int C_PRIMARY = Palette.PRIMARY;
+    private static final int C_ON_PRIMARY = Palette.ON_PRIMARY;
+    private static final int C_PRIMARY_CONT = Palette.PRIMARY_CONTAINER;
+    private static final int C_ON_PRIMARY_CONT = Palette.ON_PRIMARY_CONTAINER;
+    private static final int C_SURFACE = Palette.SURFACE;
+    private static final int C_SURF_LOW = Palette.SURFACE_LOW;
+    private static final int C_SURF_HIGH = Palette.SURFACE_HIGH;
+    private static final int C_ON_SURFACE = Palette.ON_SURFACE;
+    private static final int C_ON_SURF_VAR = Palette.ON_SURFACE_VARIANT;
+    private static final int C_OUTLINE = Palette.OUTLINE;
+    private static final int C_ERROR_CONT = Palette.ERROR_CONTAINER;
+    private static final int C_ON_ERROR_CONT = Palette.ON_ERROR_CONTAINER;
+    private static final int C_SUCCESS_CONT = Palette.SUCCESS_CONTAINER;
+    private static final int C_ON_SUCCESS_CONT = Palette.ON_SUCCESS_CONTAINER;
+    private static final int C_WARN = Palette.WARN;
 
     private static final int REQ_PICK = 2001;
 
@@ -872,7 +872,7 @@ public class CreatorActivity extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(C_SURF_LOW);
-        bg.setCornerRadius(dp(16));
+        bg.setCornerRadius(Palette.RADIUS);   // 卡片直角
         bg.setStroke(dp(1), C_OUTLINE);
         c.setBackground(bg);
         c.setPadding(dp(16), dp(16), dp(16), dp(16));
@@ -890,7 +890,7 @@ public class CreatorActivity extends Activity {
         b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(C_PRIMARY);
-        bg.setCornerRadius(dp(24));
+        bg.setCornerRadius(Palette.RADIUS);   // 按钮直角
         b.setBackground(ripple(bg));
         b.setMinHeight(dp(48));
         b.setLayoutParams(lp(-1, dp(48)));
@@ -905,7 +905,7 @@ public class CreatorActivity extends Activity {
         b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(C_PRIMARY_CONT);
-        bg.setCornerRadius(dp(24));
+        bg.setCornerRadius(Palette.RADIUS);   // 按钮直角
         b.setBackground(ripple(bg));
         b.setMinHeight(dp(42));
         return b;
@@ -919,7 +919,7 @@ public class CreatorActivity extends Activity {
         b.setTextColor(selected ? C_ON_PRIMARY_CONT : C_ON_SURFACE);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(selected ? C_PRIMARY_CONT : C_SURF_HIGH);
-        bg.setCornerRadius(dp(20));
+        bg.setCornerRadius(dp(8));   // 筛选按钮保留小圆角以表达可点性
         b.setBackground(selected ? bg : ripple(bg));
         b.setPadding(dp(12), 0, dp(12), 0);
         return b;

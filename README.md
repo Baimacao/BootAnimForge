@@ -6,7 +6,7 @@
 - **PC 端**：功能完整 —— 时间轴分段、每段循环次数/暂停、取用区间滑块、两种输出格式（传统帧序列 / Android 12+ 视频版）、Magisk 模块一键生成
 - **安卓端**：手机上直接读视频出 zip（含关机动画），并负责刷入 —— 扫描路径、Root 安装、自动备份、一键还原、圆屏适配、预览
 
-界面是 Material Design 3 风格，带非线性动效（MD3 emphasized 曲线、shared-axis X 转场）、实时预览与内置教程。
+界面是**瑞士国际主义风格**（Swiss / International Typographic Style）：三色平涂（黑 #1A1A1A / 米白 #F5F2ED / 强调红 #DA291C）、零圆角、无阴影、无渐变、12 栏网格、8px 间距基数。交互动效用弹性缓动（`cubic-bezier(.34,1.56,.64,1)`），视图转场用减速曲线以避免整屏抖动。
 PC 端引擎是本地 ffmpeg，界面在独立的 Edge 应用窗口里运行 —— 不依赖 Electron，改代码不用编译；**无需任何前置**：Node 运行时与 ffmpeg 都由程序自己准备。
 
 ![配置页](docs/screenshot-configure.png)
@@ -212,11 +212,11 @@ BootAnimForge/
 │   └── util.js               小工具
 ├── public/                   前端（原生 ES Module，无构建）
 │   ├── index.html
-│   ├── css/app.css           MD3 设计令牌 + 组件 + 动效
+│   ├── css/app.css           瑞士风设计令牌 + 组件 + 动效
 │   └── js/{app,core,data}.js 交互 / 状态与 API / 预设与文案
 ├── android/                  安卓端 App（Java 8 / minSdk 19 / 无 androidx）
 │   ├── AndroidManifest.xml
-│   ├── res/                  MD3 色板、主题、图标（弧 + 点）
+│   ├── res/                  三色色板、主题、图标（弧 + 点）
 │   └── src/com/baimacao/bootanimforge/
 │       ├── MainActivity.java      刷入界面、状态扫描、圆屏设置
 │       ├── CreatorActivity.java   制作界面：选视频 → 参数 → 生成
@@ -272,7 +272,7 @@ node tools/fetch-ffmpeg.js         # 准备 ffmpeg 引擎
 node tools/selftest.js             # 后端端到端：109 项断言（含开机/关机两种目标）
 node tools/server-ctl.js start     # 起服务
 node tools/uicheck.js --flow       # 无头浏览器跑完整流程：58 项断言
-node tools/uicheck.js --anim       # 动效验证：14 项断言（MD3 运动系统）
+node tools/uicheck.js --anim       # 动效验证：15 项断言（弹性+减速双曲线）
 node tools/uicheck.js --docshot    # 重新生成 docs/ 下的截图
 node tools/make-icons.js           # 生成应用图标
 node tools/make-portable.js 1.4.0  # 打便携包（含 Node + ffmpeg + APK，解压即用）
@@ -444,7 +444,7 @@ BootAnimForge/
 │   └── util.js               小工具
 ├── public/                   前端（原生 ES Module，无构建）
 │   ├── index.html
-│   ├── css/app.css           MD3 设计令牌 + 组件 + 动效
+│   ├── css/app.css           瑞士风设计令牌 + 组件 + 动效
 │   └── js/{app,core,data}.js 交互 / 状态与 API / 预设与文案
 ├── tools/
 │   ├── fetch-ffmpeg.js       获取 ffmpeg 运行时（多源回退）

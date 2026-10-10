@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-      主题：深色、无 ActionBar（自己画顶栏，方便圆屏适配）。
+      主题：米白底 + 无 ActionBar（自己画顶栏，方便圆屏适配）。
       windowIsRound / windowNoTitle 等属性在旧版本上会被忽略，不影响安装。
+      配色遵循瑞士国际主义风格三色：黑 #1A1A1A / 米白 #F5F2ED / 强调红 #DA291C。
     -->
     <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:colorPrimary">@color/md_primary</item>

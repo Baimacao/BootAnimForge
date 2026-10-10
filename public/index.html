@@ -17,9 +17,9 @@
       <div class="brand-logo" aria-hidden="true">
         <!-- 与 App 图标同形：升起的弧 + 中心光点 -->
         <svg viewBox="0 0 24 24">
-          <path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
-                d="M6.9 8.1A7.6 7.6 0 1 0 17.1 8.1"/>
-          <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+          <path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+                d="M6.91 17.09A7.2 7.2 0 1 1 17.09 17.09"/>
+          <circle cx="12" cy="12" r="2.7" fill="currentColor"/>
         </svg>
       </div>
       <div class="brand-text">
@@ -72,7 +72,7 @@
         </div>
         <div class="card" id="engine-card" style="margin-top:var(--sp-5)">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4Z"/></svg><span class="caption">环境</span></div>
             <h2>视频引擎状态</h2>
             <div class="spacer"></div>
             <span class="tag" id="engine-tag">检测中…</span>
@@ -111,7 +111,7 @@
 
         <div class="card" id="import-info" style="margin-top:var(--sp-5)" hidden>
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16v14H4V5Zm2 2v10h12V7H6Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16v14H4V5Zm2 2v10h12V7H6Z"/></svg><span class="caption">素材</span></div>
             <h2>源视频</h2>
             <div class="spacer"></div>
             <span class="tag info" id="src-tag"></span>
@@ -129,7 +129,7 @@
 
         <div class="card flat">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M11 7h2v2h-2V7Zm0 4h2v6h-2v-6Zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M11 7h2v2h-2V7Zm0 4h2v6h-2v-6Zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/></svg><span class="caption">引导</span></div>
             <h2>不知道从哪开始？</h2>
           </div>
           <p class="hint">第一次用建议先看 2 分钟教程：它会告诉你开机动画是怎么工作的、分辨率该怎么填、循环次数怎么设才不会卡在开机界面。</p>
@@ -145,7 +145,7 @@
         <!-- 分辨率 -->
         <div class="card">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5h18v12H3V5Zm2 2v8h14V7H5Zm3 12h8v2H8v-2Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5h18v12H3V5Zm2 2v8h14V7H5Zm3 12h8v2H8v-2Z"/></svg><span class="section-no">01 参数</span></div>
             <h2>目标分辨率</h2>
             <button class="help" data-help="res">?</button>
             <div class="spacer"></div>
@@ -179,7 +179,7 @@
         <!-- 画面适配 -->
         <div class="card">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h7v2H6v5H4V4Zm9 0h7v7h-2V6h-5V4ZM4 13h2v5h5v2H4v-7Zm14 0h2v7h-7v-2h5v-5Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h7v2H6v5H4V4Zm9 0h7v7h-2V6h-5V4ZM4 13h2v5h5v2H4v-7Zm14 0h2v7h-7v-2h5v-5Z"/></svg><span class="section-no">02 参数</span></div>
             <h2>画面适配方式</h2>
             <button class="help" data-help="scale">?</button>
             <div class="spacer"></div>
@@ -199,7 +199,7 @@
         <!-- 帧率与时长 -->
         <div class="card">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8V2Zm1 5v5.4l4.3 2.5-.9 1.7L11 13V7h2Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8V2Zm1 5v5.4l4.3 2.5-.9 1.7L11 13V7h2Z"/></svg><span class="section-no">03 参数</span></div>
             <h2>帧率与时长</h2>
             <button class="help" data-help="fps">?</button>
           </div>
@@ -244,7 +244,7 @@
         <!-- 分段与循环 -->
         <div class="card">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M7 7h10v3l4-4-4-4v3H5v6h2V7Zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M7 7h10v3l4-4-4-4v3H5v6h2V7Zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4Z"/></svg><span class="section-no">04 参数</span></div>
             <h2>分段与循环</h2>
             <button class="help" data-help="parts">?</button>
             <div class="spacer"></div>
@@ -286,7 +286,7 @@
         <!-- 操作对象：开机 / 关机 -->
         <div class="card">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M13 3h-2v10h2V3Zm4.83 2.17-1.42 1.42A6.92 6.92 0 0 1 19 12a7 7 0 1 1-14 0c0-2.22 1.03-4.2 2.64-5.49L6.17 5.1A9 9 0 1 0 21 12c0-2.74-1.23-5.19-3.17-6.83Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M13 3h-2v10h2V3Zm4.83 2.17-1.42 1.42A6.92 6.92 0 0 1 19 12a7 7 0 1 1-14 0c0-2.22 1.03-4.2 2.64-5.49L6.17 5.1A9 9 0 1 0 21 12c0-2.74-1.23-5.19-3.17-6.83Z"/></svg><span class="section-no">05 输出</span></div>
             <h2>做什么动画</h2>
             <button class="help" data-help="target">?</button>
           </div>
@@ -296,7 +296,7 @@
         <!-- 输出格式 -->
         <div class="card">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-6.6l1.3 2.1a1 1 0 1 1-1.7 1L11.4 16H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm6.6 3.2v5.6l4.8-2.8-4.8-2.8Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-6.6l1.3 2.1a1 1 0 1 1-1.7 1L11.4 16H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm6.6 3.2v5.6l4.8-2.8-4.8-2.8Z"/></svg><span class="section-no">06 输出</span></div>
             <h2>输出格式</h2>
             <button class="help" data-help="format">?</button>
             <div class="spacer"></div>
@@ -308,7 +308,7 @@
         <!-- 视频版参数 -->
         <div class="card" id="video-card" hidden>
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4Z"/></svg><span class="section-no">07 输出</span></div>
             <h2>视频版参数</h2>
             <button class="help" data-help="video">?</button>
           </div>
@@ -348,7 +348,7 @@
         <!-- 输出与打包 -->
         <div class="card">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2Z"/></svg><span class="section-no">08 输出</span></div>
             <h2>输出与打包</h2>
           </div>
           <div class="grid-2">
@@ -502,7 +502,7 @@
       <section class="view" id="view-export" hidden>
         <div class="card" id="preflight">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="m9 16.2-3.5-3.5L4 14.2 9 19 20 8l-1.5-1.4L9 16.2Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="m9 16.2-3.5-3.5L4 14.2 9 19 20 8l-1.5-1.4L9 16.2Z"/></svg><span class="caption">校验</span></div>
             <h2>转换前检查</h2>
             <div class="spacer"></div>
             <span class="tag" id="preflight-tag">检查中…</span>
@@ -513,7 +513,7 @@
 
         <div class="card">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M5 20h14v-2H5v2ZM12 3 6.5 8.5 8 10l3-3V16h2V7l3 3 1.5-1.5L12 3Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M5 20h14v-2H5v2ZM12 3 6.5 8.5 8 10l3-3V16h2V7l3 3 1.5-1.5L12 3Z"/></svg><span class="caption">产物</span></div>
             <h2>desc.txt 内容（将写入 zip）</h2>
             <button class="help" data-help="desc">?</button>
             <div class="spacer"></div>
@@ -525,7 +525,7 @@
 
         <div class="card">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 2 7l10 5 10-5-10-5Zm0 7.2L5.6 6 12 3.1 18.4 6 12 9.2ZM2 17l10 5 10-5-10-5-10 5Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 2 7l10 5 10-5-10-5Zm0 7.2L5.6 6 12 3.1 18.4 6 12 9.2ZM2 17l10 5 10-5-10-5-10 5Z"/></svg><span class="caption">产物</span></div>
             <h2>打包内容</h2>
           </div>
           <div class="msg-list" id="zip-plan"></div>
@@ -581,7 +581,7 @@
 
         <div class="card" style="margin-top:var(--sp-5)">
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4Z"/></svg><span class="caption">安装</span></div>
             <h2>怎么装到手机上</h2>
           </div>
           <div id="install-guide"></div>
@@ -593,7 +593,7 @@
 
         <div class="card" id="done-msgs-card" hidden>
           <div class="card-head">
-            <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 1 21h22L12 2Zm1 14h-2v2h2v-2Zm0-7h-2v5h2V9Z"/></svg>
+            <div class="col"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 1 21h22L12 2Zm1 14h-2v2h2v-2Zm0-7h-2v5h2V9Z"/></svg><span class="caption">校验</span></div>
             <h2>提示与警告</h2>
           </div>
           <div class="msg-list" id="done-msgs"></div>
