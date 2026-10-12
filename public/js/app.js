@@ -98,7 +98,6 @@ function goStep(n) {
 
 async function init() {
   loadState();
-  applyTheme(state.theme);
   bindGlobal();
   bootStepper();
 
@@ -147,11 +146,9 @@ async function init() {
 }
 
 function bindGlobal() {
-  $('#btn-theme').onclick = () => {
-    state.theme = state.theme === 'dark' ? 'light' : 'dark';
-    applyTheme(state.theme);
-    saveState();
-  };
+  // 明暗主题切换已移除：瑞士风格是单主题（米白底 + 黑字 + 强调红），
+  // 原按钮会设置 data-theme 属性但 CSS 里已无对应规则 —— 按钮成了死的，
+  // 因此连按钮与 applyTheme() 一并删除，而不是留一个无效果的控件。
   $('#btn-close').onclick = async () => {
     if (state.step === 4) { toast('转换进行中，请先取消'); return; }
     try { await api.shutdown(); } catch { /* 服务可能已经退出 */ }
@@ -187,10 +184,6 @@ function bindGlobal() {
     const a = e.target.closest('a[target="_blank"], a[href^="http"]');
     if (a) e.preventDefault();
   }, true);
-}
-
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
 }
 
 function bootStepper() { renderStepper(); }

@@ -168,14 +168,12 @@ export const state = {
   settings: {},
   playing: false,
   playhead: 0,
-  theme: 'dark',
 };
 
 export function saveState() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify({
       config: state.config,
-      theme: state.theme,
       input: state.input,
     }));
   } catch { /* 忽略隐私模式等写入失败 */ }
@@ -187,7 +185,6 @@ export function loadState() {
     if (!raw) return;
     const saved = JSON.parse(raw);
     if (saved.config) state.config = { ...defaultConfig(), ...saved.config };
-    if (saved.theme) state.theme = saved.theme;
     if (saved.input) state.input = saved.input;
   } catch { /* ignore */ }
 }

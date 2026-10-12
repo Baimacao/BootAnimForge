@@ -105,6 +105,37 @@ function dexContains(buf, s) {
     /uses-feature-not-required: name='android\.hardware\.touchscreen'/.test(d));
   ok('未申请危险的无限制存储权限', !/MANAGE_EXTERNAL_STORAGE/.test(d));
 
+  /* ---------- 2b. PC 端图标集统一（官方 Material Symbols） ---------- */
+  section('2b. PC 端图标集（官方 Material Symbols Outlined）');
+  {
+    const idx = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+    // 官方 Material Symbols 的 viewBox 是 "0 -960 960 960"，旧的手写图标是 "0 0 24 24"
+    const official = (idx.match(/viewBox="0 -960 960 960"/g) || []).length;
+    const legacyLines = idx.split('\n')
+      .map((l, i) => ({ l, i }))
+      .filter((x) => /viewBox="0 0 24 24"/.test(x.l));
+    ok('通用图标已全部换成官方图标（≥28 个）', official >= 28, '实际 ' + official + ' 个');
+    // 只允许品牌 logo 保留自有几何（它必须与安卓应用图标同形）
+    ok('仅品牌 logo 保留自有 viewBox', legacyLines.length === 1,
+      '仍有 ' + legacyLines.length + ' 处旧 viewBox: ' + legacyLines.map((x) => 'L' + (x.i + 1)).join(','));
+    ok('品牌 logo 仍在（未误删）', /brand-logo/.test(idx), '未找到 .brand-logo');
+    // 右上角只应有帮助与关闭两个按钮
+    const appbarBtns = (idx.match(/class="icon-btn"/g) || []).length;
+    ok('appbar 只有 2 个图标按钮（帮助 + 关闭）', appbarBtns === 2, '实际 ' + appbarBtns + ' 个');
+    ok('已移除失效的「切换明暗主题」按钮', !/btn-theme/.test(idx), '仍存在 btn-theme');
+    const app = fs.readFileSync(path.join(ROOT, 'public', 'js', 'app.js'), 'utf8');
+    // 排除注释行：本次移除的说明里会引用被删掉的函数名
+    const appCode = app.split('\n')
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join('\n');
+    ok('已移除 applyTheme 死代码', !/applyTheme/.test(appCode), '仍存在 applyTheme 调用/定义');
+    const core = fs.readFileSync(path.join(ROOT, 'public', 'js', 'core.js'), 'utf8');
+    ok('已移除 state.theme', !/theme\s*:/.test(core), '仍存在 theme 状态');
+    // 原先两个手改坏的路径不应再出现
+    ok('不再有锯齿状主题图标路径', !/1\.9 3\.2 3\.6-\.9/.test(idx), '旧的坏路径仍在');
+    ok('不再有不对称关闭图标路径', !/M6\.4 5 5 6\.4 10\.6 12/.test(idx), '旧的坏路径仍在');
+  }
+
   /* ---------- 3. dex 内容 ---------- */
   section('3. DEX 内容（关键类与文案是否真的编进去了）');
   const dex = z.get('classes.dex');
