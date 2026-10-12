@@ -189,8 +189,61 @@ function dexContains(buf, s) {
   ok('colors.xml 表面为米白', /md_surface">#F5F2ED/.test(colorsXml), '未同步');
   ok('colors.xml 已无 MD3 深色残留', !/#0E1418|#4FC3F7/.test(colorsXml), '仍含 MD3 深色值');
 
-  section('5. 兼容性写法');
-  ok('用了 isScreenRound（API 23+ 特性检测）', dexContains(dex, 'isScreenRound'));
+  /* ---------- 4c. 目标感知：切换开机/关机时文案与备份必须跟随 ---------- */
+  section('4c. 开机/关机目标感知（防止文案与备份被写死）');
+  {
+    const SRC = path.join(ROOT, 'android', 'src', 'com', 'baimacao', 'bootanimforge');
+    const main = fs.readFileSync(path.join(SRC, 'MainActivity.java'), 'utf8');
+    const bk = fs.readFileSync(path.join(SRC, 'BackupManager.java'), 'utf8');
+    const cre = fs.readFileSync(path.join(SRC, 'Creator.java'), 'utf8');
+    const creA = fs.readFileSync(path.join(SRC, 'CreatorActivity.java'), 'utf8');
+
+    // MainActivity 不应再写死文件名/标题（排除注释：本次修复的说明里会引用原字符串）
+    const mainCode = main.split('\n')
+      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+      .join('\n');
+    ok('MainActivity 代码中不再硬编码「选择 bootanimation.zip」',
+      !/选择 bootanimation\.zip/.test(mainCode), '仍有硬编码按钮文字');
+    ok('MainActivity 代码中不再硬编码卡片标题「制作开机动画」',
+      !/sectionHead\("制作开机动画"\)/.test(mainCode), '仍有硬编码标题');
+    ok('MainActivity 代码中不再硬编码落盘名 bootanimation.zip',
+      !/new File\(dir, "bootanimation\.zip"\)/.test(mainCode), '仍有硬编码落盘名');
+    ok('存在集中改写目标文案的方法 refreshTargetText',
+      /private void refreshTargetText\(\)/.test(main), '未找到 refreshTargetText');
+    ok('切换目标时会调用 refreshTargetText',
+      /rebuildTargetRow\(\);[\s\S]{0,400}?refreshTargetText\(\)/.test(main), '未在切换后刷新文案');
+    ok('按钮文字用 AnimTarget.fileName 动态生成',
+      /installBtn\.setText\("选择 " \+ AnimTarget\.fileName\(animTarget\)\)/.test(main), '未动态生成');
+
+    // BackupManager 必须按目标隔离
+    ok('BackupManager 备份目录按目标分开',
+      /dir\(Context c, int target\)/.test(bk) && /AnimTarget\.SHUTDOWN \? "shutdown" : "boot"/.test(bk),
+      '未按目标分目录（原始备份会互相覆盖）');
+    ok('BackupManager 备份文件名按目标生成前缀',
+      /shutdownanimation-/.test(bk) && /bootanimation-/.test(bk), '文件名前缀未跟随目标');
+    ok('BackupManager.backup 接收 target',
+      /static String backup\(Context c, String sourcePath, BootScanner\.Found active, int target\)/.test(bk),
+      '未接收 target');
+    ok('BackupManager.list 接收 target',
+      /static List<File> list\(Context c, int target\)/.test(bk), '未接收 target');
+    ok('MainActivity 调用 BackupManager 时传入 animTarget',
+      /BackupManager\.backup\([^)]*animTarget\)/.test(main) && /BackupManager\.list\(this, animTarget\)/.test(main),
+      '调用点未传目标');
+
+    // 循环部分：安卓端必须能配置次数与暂停
+    ok('Creator.Part 有 pause 字段', /public int pause;/.test(cre), '缺少 pause');
+    ok('desc 写出真实 pause 而非写死 0',
+      /append\(p\.pause\)/.test(cre), 'pause 仍被写死为 0');
+    ok('plan 读取 parts 的第 4 个元素作为暂停',
+      /p\.length > 3 \? \(int\) p\[3\] : 0/.test(cre), '未读取暂停');
+    ok('CreatorActivity 会设置 o.parts（原先完全没设）',
+      /o\.parts = new double\[\]\[\]/.test(creA), 'o.parts 未被设置，循环不可配置');
+    ok('CreatorActivity 有循环次数 UI', /rebuildLoopRow\(\)/.test(creA), '未找到循环 UI');
+    ok('切换目标时重置为合理循环默认（关机=1 遍）',
+      /loopCount = \(t == Creator\.TARGET_SHUTDOWN\) \? 1 : 0/.test(creA), '未按目标设默认');
+  }
+
+  section('5. 兼容性写法');  ok('用了 isScreenRound（API 23+ 特性检测）', dexContains(dex, 'isScreenRound'));
   ok('用了 UiModeManager 旧版本回退', dexContains(dex, 'getCurrentModeType'));
   ok('用了 RippleDrawable（有版本判断）', dexContains(dex, 'RippleDrawable') || dexContains(dex, 'Landroid/graphics/drawable/RippleDrawable;'));
   ok('用了 od 而不是 xxd 读文件头（精简 ROM 兼容）', dexContains(dex, 'od -An -tx1 -N 4'));

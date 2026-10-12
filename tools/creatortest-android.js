@@ -120,6 +120,36 @@ public class CreatorTest {
         od.width = 480; od.height = 480; od.fps = 15; od.partType = 'f';
         System.out.println("DESCEXPLICIT\\t" + Creator.buildDesc(od, parts).replace("\\r\\n", "\\\\r\\\\n"));
 
+        /* ---- 6b. 循环部分：次数与段间暂停 ---- */
+        Creator.FrameSource loopSrc = new Creator.FrameSource() {
+            public int displayWidth() { return 64; }
+            public int displayHeight() { return 64; }
+            public double durationSec() { return 10.0; }
+            public double fps() { return 30; }
+            public int[] frameAt(double sec) { return testFrame(64, 64); }
+            public void close() { }
+        };
+        // {起, 止, 次数, 暂停}
+        Creator.Options ol = new Creator.Options();
+        ol.fps = 10; ol.parts = new double[][] { { 0, 2, 3, 15 } };
+        java.util.List<Creator.Part> loopPlan = Creator.plan(ol, loopSrc);
+        System.out.println("LOOPCOUNT\\t" + loopPlan.get(0).count);
+        System.out.println("LOOPPAUSE\\t" + loopPlan.get(0).pause);
+        System.out.println("LOOPFRAMES\\t" + loopPlan.get(0).frames);
+        System.out.println("LOOPDESC\\t" + Creator.buildDesc(ol, loopPlan).replace("\\r\\n", "\\\\r\\\\n"));
+
+        // 次数 0 = 无限循环
+        Creator.Options oinf = new Creator.Options();
+        oinf.fps = 10; oinf.parts = new double[][] { { 0, 2, 0, 0 } };
+        System.out.println("INFCOUNT\\t" + Creator.plan(oinf, loopSrc).get(0).count);
+        System.out.println("INFDESC\\t"
+                + Creator.buildDesc(oinf, Creator.plan(oinf, loopSrc)).replace("\\r\\n", "\\\\r\\\\n"));
+
+        // 只给 3 个元素（不带暂停）时不应崩，暂停按 0 处理
+        Creator.Options o3el = new Creator.Options();
+        o3el.fps = 10; o3el.parts = new double[][] { { 0, 2, 2 } };
+        System.out.println("THREEPART\\t" + Creator.plan(o3el, loopSrc).get(0).pause);
+
         // 段自身携带类型时应优先于 cfg.partType
         java.util.List<Creator.Part> typed = new java.util.ArrayList<Creator.Part>();
         typed.add(new Creator.Part("part0", 0, 1, 15, 0));
@@ -442,6 +472,18 @@ async function probeSize(file) {
   ok('partType=f 时段类型变 f', /^480 480 15\\r\\nf 0 0 part0\\r\\n$/.test(field('DESCEXPLICIT')),
     field('DESCEXPLICIT'));
   ok('段自身带类型时优先于 partType', /^480 480 15\\r\\np 0 0 part0\\r\\n$/.test(field('DESCTYPE')), field('DESCTYPE'));
+
+  /* ---------- 5b. 循环部分 ---------- */
+  section('5b. 循环部分（次数 / 段间暂停）');
+  ok('播放次数被采纳（3 遍）', Number(field('LOOPCOUNT')) === 3, field('LOOPCOUNT'));
+  ok('段间暂停被采纳（15 帧）', Number(field('LOOPPAUSE')) === 15, field('LOOPPAUSE'));
+  ok('一遍帧数 = 2s × 10fps = 20', Number(field('LOOPFRAMES')) === 20, field('LOOPFRAMES'));
+  // desc 行格式：类型 次数 暂停 目录（宽高用 Options 默认值，故只锁定 fps 与段行）
+  ok('desc 写出「次数 暂停」（p 3 15 part0）',
+    /10\\r\\np 3 15 part0\\r\\n$/.test(field('LOOPDESC')), field('LOOPDESC'));
+  ok('次数 0 = 无限循环', Number(field('INFCOUNT')) === 0, field('INFCOUNT'));
+  ok('无限循环 desc 写 0', /10\\r\\np 0 0 part0\\r\\n$/.test(field('INFDESC')), field('INFDESC'));
+  ok('parts 只给 3 个元素时暂停按 0 处理（不崩）', Number(field('THREEPART')) === 0, field('THREEPART'));
 
   /* ---------- 6. 取用区间 ---------- */
   section('6. 取用区间');

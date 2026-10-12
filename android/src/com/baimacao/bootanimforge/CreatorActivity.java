@@ -93,6 +93,13 @@ public class CreatorActivity extends Activity {
     private int animTarget = Creator.TARGET_BOOT;   // 开机 / 关机
     private double trimStart = 0;         // 取用区间（秒）
     private double trimEnd = 0;           // 0 = 到视频结尾
+    /**
+     * 循环部分的播放次数：0 = 无限循环（开机动画常规做法）。
+     * 与 Creator.Options.parts[][2] 对应。
+     */
+    private int loopCount = 0;
+    /** 每段之间的暂停帧数（AOSP desc.txt 的 pause 字段，单位是帧不是秒） */
+    private int pauseFrames = 0;
 
     private VideoProbe probe;
     private File stagedVideo;
@@ -211,6 +218,18 @@ public class CreatorActivity extends Activity {
         this.fpsRow = fpsRow;
         content.addView(c3);
 
+        // ---- 3b. 循环部分 ----
+        LinearLayout cLoop = card();
+        cLoop.addView(sectionHead("3b · 循环部分"));
+        cLoop.addView(sub("决定动画播几遍。开机动画一般用「无限循环」，这样系统启动快慢都能衔接上；"
+                + "关机动画建议播 1 遍，配合「必须播完」的类型，避免还没播完就断电。"));
+        loopRow = new LinearLayout(this);
+        loopRow.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams lrLp = lp(-1, -2);
+        lrLp.topMargin = dp(10);
+        cLoop.addView(loopRow, lrLp);
+        content.addView(cLoop);
+
         // ---- 4. 帧命名（进阶）----
         LinearLayout c4 = card();
         c4.addView(sectionHead("4 · 帧文件命名（进阶）"));
@@ -286,10 +305,112 @@ public class CreatorActivity extends Activity {
         rebuildTargetRow();
         rebuildPresetRow();
         rebuildNamingRow();
+        rebuildLoopRow();
         updateTrimInfo();
     }
 
     private LinearLayout fpsRow;
+    private LinearLayout loopRow;
+
+    /**
+     * 循环部分：播放次数 + 段间暂停。
+     * 次数 0 = 无限循环。预设覆盖两种动画的常见做法。
+     */
+    private void rebuildLoopRow() {
+        if (loopRow == null) return;
+        loopRow.removeAllViews();
+
+        // 预设：无限循环 / 播 1 遍 / 播 2 遍 / 播 3 遍
+        final int[] counts = { 0, 1, 2, 3 };
+        final String[] names = { "无限循环", "播 1 遍", "播 2 遍", "播 3 遍" };
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < counts.length; i++) {
+            final int cv = counts[i];
+            Button b = chip(names[i], loopCount == cv);
+            b.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) { loopCount = cv; rebuildLoopRow(); }
+            });
+            LinearLayout.LayoutParams bl = lp(0, dp(42));
+            bl.weight = 1f;
+            bl.rightMargin = dp(6);
+            row.addView(b, bl);
+        }
+        loopRow.addView(row);
+
+        TextView info = sub("");
+        info.setText(loopSummary());
+        LinearLayout.LayoutParams il = lp(-1, -2);
+        il.topMargin = dp(8);
+        loopRow.addView(info, il);
+
+        Button adv = tonal("自定义次数与段间暂停");
+        adv.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { askLoop(); }
+        });
+        LinearLayout.LayoutParams al = lp(-1, dp(42));
+        al.topMargin = dp(8);
+        loopRow.addView(adv, al);
+    }
+
+    /** 当前循环设置的可读摘要 */
+    private String loopSummary() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("当前：").append(loopCount == 0 ? "无限循环" : "播放 " + loopCount + " 遍");
+        if (pauseFrames > 0) sb.append("，每遍之间暂停 ").append(pauseFrames).append(" 帧");
+        if (probe != null) {
+            double total = probe.durationSec;
+            double s = Math.max(0, trimStart);
+            double e = trimEnd > 0 ? Math.min(trimEnd, total) : total;
+            if (e <= s) e = Math.min(total, s + 0.1);
+            int frames = (int) Math.max(1, Math.round((e - s) * fps));
+            sb.append("\n一遍 ").append(frames).append(" 帧");
+            if (loopCount > 0) {
+                sb.append("，共约 ").append(frames * loopCount).append(" 帧");
+                sb.append(String.format(Locale.US, "（%.1f 秒）", frames * loopCount / (double) fps));
+            }
+        }
+        return sb.toString();
+    }
+
+    /** 自定义循环次数与暂停帧数 */
+    private void askLoop() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(8), dp(20), 0);
+        final EditText ec = new EditText(this);
+        ec.setHint("播放次数（0 = 无限循环）");
+        ec.setInputType(InputType.TYPE_CLASS_NUMBER);
+        ec.setText(String.valueOf(loopCount));
+        final EditText ep = new EditText(this);
+        ep.setHint("每遍之间暂停帧数（0 = 不暂停）");
+        ep.setInputType(InputType.TYPE_CLASS_NUMBER);
+        ep.setText(String.valueOf(pauseFrames));
+        box.addView(sub("暂停的单位是**帧**不是秒（AOSP desc.txt 规范如此）。例如 30fps 下 15 帧 = 0.5 秒。"));
+        box.addView(ec);
+        box.addView(ep);
+        new AlertDialog.Builder(this)
+                .setTitle("循环设置")
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("确定", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        try {
+                            String cs = ec.getText().toString().trim();
+                            String ps = ep.getText().toString().trim();
+                            int c = cs.length() == 0 ? 0 : Integer.parseInt(cs);
+                            int p = ps.length() == 0 ? 0 : Integer.parseInt(ps);
+                            if (c < 0) c = 0;
+                            if (p < 0) p = 0;
+                            loopCount = Math.min(c, 100000);
+                            pauseFrames = Math.min(p, 100000);
+                            rebuildLoopRow();
+                        } catch (Throwable t) {
+                            toast("请输入整数");
+                        }
+                    }
+                }).show();
+    }
 
     /** 开机 / 关机 选择 */
     private void rebuildTargetRow() {
@@ -303,8 +424,14 @@ public class CreatorActivity extends Activity {
             Button b = chip(label, animTarget == t);
             b.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
+                    if (animTarget == t) return;
                     animTarget = t;
+                    // 两种动画的循环惯例不同：开机应无限循环（系统启动快慢都能衔接），
+                    // 关机应只播一遍（配合「必须播完」，避免还没播完就断电）。
+                    // 用户之后仍可自行改。
+                    loopCount = (t == Creator.TARGET_SHUTDOWN) ? 1 : 0;
                     rebuildTargetRow();
+                    rebuildLoopRow();
                 }
             });
             LinearLayout.LayoutParams bl = lp(-1, dp(44));
@@ -747,6 +874,11 @@ public class CreatorActivity extends Activity {
                 o.endSec = trimEnd;
                 // 关机动画用 c：系统关掉之前必须整段播完
                 o.partType = animTarget == Creator.TARGET_SHUTDOWN ? 'c' : 'p';
+                // 循环部分：{起始秒, 结束秒, 播放次数}，次数 0 = 无限循环。
+                // 之前完全没有设置 parts，导致循环次数在安卓端不可配置（Creator.plan 会用默认单段无限循环）。
+                double loopEnd = trimEnd > 0 ? trimEnd
+                        : (probe != null ? probe.durationSec : 0);
+                o.parts = new double[][] { { trimStart, loopEnd, loopCount, pauseFrames } };
 
                 String err = null;
                 Creator.Result result = null;

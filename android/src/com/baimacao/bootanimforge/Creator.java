@@ -98,6 +98,8 @@ public final class Creator {
          * 如果这里直接给默认 'p' 就永远覆盖不上（PC 端踩过同样的坑）。
          */
         public char type;
+        /** 段间暂停帧数（AOSP desc.txt 的 pause 字段，单位是帧不是秒） */
+        public int pause;
         public Part(String dir, double start, double end, int frames, int count) {
             this.dir = dir; this.start = start; this.end = end; this.frames = frames; this.count = count;
         }
@@ -123,7 +125,10 @@ public final class Creator {
             double pe = Math.min(e, p[1]);
             if (pe <= ps) continue;
             int count = p.length > 2 ? (int) p[2] : 0;
-            out.add(new Part("part" + i, ps, pe, frameCount(ps, pe, fps), count));
+            int pause = p.length > 3 ? (int) p[3] : 0;
+            Part np = new Part("part" + i, ps, pe, frameCount(ps, pe, fps), count);
+            np.pause = Math.max(0, pause);
+            out.add(np);
         }
         if (out.isEmpty()) out.add(new Part("part0", s, e, frameCount(s, e, fps), 0));
         return out;
@@ -143,7 +148,8 @@ public final class Creator {
         for (Part p : parts) {
             char type = (p.type == 'c' || p.type == 'f' || p.type == 'p') ? p.type : fallback;
             // 关机动画用 c：系统关掉之前必须播完，否则会看不到完整动画
-            sb.append(type).append(' ').append(p.count).append(" 0 ").append(p.dir).append("\r\n");
+            sb.append(type).append(' ').append(p.count).append(' ').append(p.pause)
+              .append(' ').append(p.dir).append("\r\n");
         }
         return sb.toString();
     }

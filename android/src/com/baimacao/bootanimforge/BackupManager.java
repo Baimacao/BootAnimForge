@@ -32,10 +32,18 @@ final class BackupManager {
 
     private BackupManager() { }
 
-    private static File dir(Context c) {
+    /**
+     * 备份目录**按目标分开放**。
+     *
+     * 为什么必须分开：原先开机与关机共用同一个目录、同一个 origin-first.zip，
+     * 于是「关机动画的首次备份」会覆盖掉「开机动画的首次备份」——
+     * 一旦开机动画被换掉，就再也回不到出厂状态（首次备份已被顶掉）。
+     * 分目录后两者互不干扰，且 list/rotate 天然隔离。
+     */
+    private static File dir(Context c, int target) {
         File base = c.getExternalFilesDir(null);
         if (base == null) base = c.getFilesDir();
-        File d = new File(base, DIR);
+        File d = new File(new File(base, DIR), target == AnimTarget.SHUTDOWN ? "shutdown" : "boot");
         if (!d.exists()) d.mkdirs();
         return d;
     }
@@ -44,21 +52,22 @@ final class BackupManager {
      * 备份当前动画。
      * @return 给用户看的一行说明
      */
-    static String backup(Context c, String sourcePath, BootScanner.Found active) {
+    static String backup(Context c, String sourcePath, BootScanner.Found active, int target) {
         if (sourcePath == null) return "跳过备份：没有确定当前动画路径";
         RootShell.FileInfo fi = RootShell.statFile(sourcePath);
         if (!fi.exists) return "跳过备份：" + sourcePath + " 不存在（首次安装）";
 
-        File d = dir(c);
+        File d = dir(c, target);
         String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date());
-        File out = new File(d, "bootanimation-" + stamp + ".zip");
+        String prefix = target == AnimTarget.SHUTDOWN ? "shutdownanimation-" : "bootanimation-";
+        File out = new File(d, prefix + stamp + ".zip");
 
         RootShell.Result r = RootShell.pullTo(sourcePath, out.getAbsolutePath());
         if (!r.ok() || !out.exists() || out.length() == 0) {
             return "备份失败（不影响安装）：" + r.text();
         }
 
-        // 第一次备份额外留一份"原始"，永不被轮转删除
+        // 每个目标各自留一份"原始"，永不被轮转删除
         File first = new File(d, FIRST);
         if (!first.exists()) {
             try {
@@ -67,13 +76,14 @@ final class BackupManager {
         }
 
         rotate(d);
-        return "已备份原动画到 " + out.getName() + "（" + BootCore.mb(out.length()) + "）";
+        return "已备份原" + AnimTarget.label(target) + "到 " + out.getName()
+                + "（" + BootCore.mb(out.length()) + "）";
     }
 
     /** 按时间倒序列出备份，含首次备份 */
-    static List<File> list(Context c) {
+    static List<File> list(Context c, int target) {
         List<File> out = new ArrayList<File>();
-        File d = dir(c);
+        File d = dir(c, target);
         File[] files = d.listFiles();
         if (files == null) return out;
         Arrays.sort(files, new Comparator<File>() {
@@ -109,7 +119,11 @@ final class BackupManager {
         if (files == null) return;
         List<File> all = new ArrayList<File>();
         for (File f : files) {
-            if (f.isFile() && f.getName().startsWith("bootanimation-") && f.getName().endsWith(".zip")) all.add(f);
+            // 两种前缀都接受：目录已按目标分开，这里只需排除 origin-first.zip
+            if (f.isFile() && f.getName().endsWith(".zip")
+                    && (f.getName().startsWith("bootanimation-") || f.getName().startsWith("shutdownanimation-"))) {
+                all.add(f);
+            }
         }
         if (all.size() <= MAX_BACKUPS) return;
         java.util.Collections.sort(all, new Comparator<File>() {

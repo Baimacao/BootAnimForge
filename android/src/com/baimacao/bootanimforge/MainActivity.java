@@ -90,6 +90,8 @@ public class MainActivity extends Activity {
     private int animTarget = AnimTarget.BOOT;      // 当前操作的是开机还是关机动画
     private LinearLayout targetRow;
     private Button previewBtn;
+    /** 目标相关文案的持有者：切换开机/关机时需就地改写，避免残留"开机动画"字样 */
+    private TextView makeHeadView, makeTipView, installHeadView, installTipView, footView;
     private File staged;                        // 已复制到应用目录、待安装的包
     private BootCore.Report stagedReport;
 
@@ -202,9 +204,10 @@ public class MainActivity extends Activity {
 
         // ---- 制作入口 ----
         LinearLayout makeCard = card();
-        makeCard.addView(sectionHead("制作开机动画"));
-        makeCard.addView(text("在手机上把一段视频做成 bootanimation.zip。适合「截几秒 + 改成手表分辨率 + 直接装上」这种场景；"
-                + "长视频与多段拆分建议用电脑端。", 12, C_ON_SURF_VAR, false));
+        makeHeadView = sectionHead("制作动画");
+        makeCard.addView(makeHeadView);
+        makeTipView = text("", 12, C_ON_SURF_VAR, false);
+        makeCard.addView(makeTipView);
         Button makeBtn = primaryButton("打开制作");
         makeBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -230,14 +233,14 @@ public class MainActivity extends Activity {
 
         // ---- 安装卡片 ----
         LinearLayout installCard = card();
-        installCard.addView(sectionHead("安装开机动画"));
-        TextView tip = text("选一个 bootanimation.zip → 校验 → 安装。安装前会自动备份当前动画。",
-                12, C_ON_SURF_VAR, false);
+        installHeadView = sectionHead("安装动画");
+        installCard.addView(installHeadView);
+        installTipView = text("", 12, C_ON_SURF_VAR, false);
         LinearLayout.LayoutParams tipLp = lp(-1, -2);
         tipLp.bottomMargin = dp(12);
-        installCard.addView(tip, tipLp);
+        installCard.addView(installTipView, tipLp);
 
-        installBtn = primaryButton("选择 bootanimation.zip");
+        installBtn = primaryButton("选择动画包");
         installBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { pickPackage(); }
         });
@@ -318,8 +321,8 @@ public class MainActivity extends Activity {
         content.addView(backupCard);
 
         // ---- 底部说明 ----
-        TextView foot = text("需要 root（Magisk / SuperSU 均可）。本程序只替换开机动画文件，不修改分区表、不动 boot 分区。",
-                11, C_ON_SURF_VAR, false);
+        footView = text("", 11, C_ON_SURF_VAR, false);
+        TextView foot = footView;
         LinearLayout.LayoutParams fLp = lp(-1, -2);
         fLp.topMargin = dp(8);
         content.addView(foot, fLp);
@@ -356,6 +359,37 @@ public class MainActivity extends Activity {
             bl.bottomMargin = dp(6);
             targetRow.addView(b, bl);
         }
+        refreshTargetText();
+    }
+
+    /**
+     * 把与「开机 / 关机」相关的文案与按钮文字就地改写。
+     *
+     * 为什么单独抽一个方法：原先这些字符串是**硬编码写死**的（"制作开机动画"、
+     * "选择 bootanimation.zip"、"只替换开机动画文件" 等 8 处），切换到关机动画后
+     * 二级界面仍显示开机相关文字，用户会以为装错了对象。所有目标相关文案必须集中在此，
+     * 新增文案也要走这里，避免再次写死。
+     */
+    private void refreshTargetText() {
+        final String label = AnimTarget.label(animTarget);
+        final String file = AnimTarget.fileName(animTarget);
+
+        if (makeHeadView != null) makeHeadView.setText("制作" + label);
+        if (makeTipView != null) {
+            makeTipView.setText("在手机上把一段视频做成 " + file + "。适合「截几秒 + 改成手表分辨率 + 直接装上」这种场景；"
+                    + "长视频与多段拆分建议用电脑端。");
+        }
+        if (installHeadView != null) installHeadView.setText("安装" + label);
+        if (installTipView != null) {
+            installTipView.setText("选一个 " + file + " → 校验 → 安装。安装前会自动备份当前"
+                    + label + "。");
+        }
+        if (footView != null) {
+            footView.setText("需要 root（Magisk / SuperSU 均可）。本程序只替换" + label
+                    + "文件，不修改分区表、不动 boot 分区。");
+        }
+        if (installBtn != null) installBtn.setText("选择 " + file);
+        if (previewBtn != null) previewBtn.setText("预览当前" + label);
     }
 
     /**
@@ -577,7 +611,7 @@ public class MainActivity extends Activity {
                 public void onClick(View v) { refreshAll(); }
             });
         } else {
-            installBtn.setText("选择 bootanimation.zip");
+            installBtn.setText("选择 " + AnimTarget.fileName(animTarget));
             installBtn.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) { pickPackage(); }
             });
@@ -593,7 +627,7 @@ public class MainActivity extends Activity {
         intent.setType("*/*");
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         try {
-            startActivityForResult(Intent.createChooser(intent, "选择 bootanimation.zip"), REQ_PICK);
+            startActivityForResult(Intent.createChooser(intent, "选择 " + AnimTarget.fileName(animTarget)), REQ_PICK);
         } catch (Throwable t) {
             toast("无法打开文件选择器：" + t.getMessage());
         }
@@ -620,7 +654,8 @@ public class MainActivity extends Activity {
                 File[] old = dir.listFiles();
                 if (old != null) for (File f : old) f.delete();
 
-                final File out = new File(dir, "bootanimation.zip");
+                // 暂存名跟随目标：否则选了关机动画却存成 bootanimation.zip，误导用户也难排查
+                final File out = new File(dir, AnimTarget.fileName(animTarget));
                 String err = null;
                 try {
                     InputStream in = getContentResolver().openInputStream(uri);
@@ -641,7 +676,7 @@ public class MainActivity extends Activity {
                         if (ferr != null) {
                             showReport(null);
                             toast("读取失败：" + ferr);
-                            installBtn.setText("选择 bootanimation.zip");
+                            installBtn.setText("选择 " + AnimTarget.fileName(animTarget));
                             return;
                         }
                         staged = out;
@@ -739,7 +774,7 @@ public class MainActivity extends Activity {
                 String err = null;
                 try {
                     // 1) 备份当前动画
-                    String backupMsg = BackupManager.backup(MainActivity.this, dest, active);
+                    String backupMsg = BackupManager.backup(MainActivity.this, dest, active, animTarget);
                     log.append(backupMsg).append('\n');
 
                     // 2) 暂存文件复制到 root 可读的位置
@@ -772,7 +807,7 @@ public class MainActivity extends Activity {
                 ui.post(new Runnable() {
                     public void run() {
                         installBtn.setEnabled(true);
-                        installBtn.setText("选择 bootanimation.zip");
+                        installBtn.setText("选择 " + AnimTarget.fileName(animTarget));
                         if (ferr == null) {
                             successDialog("安装成功", flog + "\n重启后生效。");
                         } else {
@@ -786,7 +821,7 @@ public class MainActivity extends Activity {
     }
 
     private void confirmRestore() {
-        final List<File> list = BackupManager.list(this);
+        final List<File> list = BackupManager.list(this, animTarget);
         if (list.isEmpty()) {
             toast("还没有任何备份");
             return;
@@ -844,7 +879,7 @@ public class MainActivity extends Activity {
     private void refreshBackups() {
         if (backupRow == null) return;
         backupRow.removeAllViews();
-        List<File> list = BackupManager.list(this);
+        List<File> list = BackupManager.list(this, animTarget);
         if (list.isEmpty()) {
             backupRow.addView(text("暂无备份", 13, C_ON_SURF_VAR, false));
             restoreBtn.setEnabled(false);
